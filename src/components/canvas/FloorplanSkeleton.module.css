@@ -5,164 +5,149 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 18px;
+  gap: 20px;
   padding: 48px;
 }
 
-.sheet {
-  position: relative;
-  width: min(72%, 980px);
-  aspect-ratio: 1492 / 1054;
-  max-height: 70%;
-  border-radius: 12px;
-  background: #eef2f8;
-  box-shadow: var(--shadow-md);
-  overflow: hidden;
+.card {
+  background: #fff;
+  border-radius: 16px;
+  box-shadow: 0 6px 24px rgba(23, 34, 59, 0.08), 0 1px 3px rgba(23, 34, 59, 0.06);
+  padding: 26px 30px;
 }
 
-/* Room placeholder: breathing base + its own staggered highlight sweep. */
-.block {
-  position: absolute;
-  border-radius: 8px;
-  background: #e0e7f1;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  gap: 10%;
-  padding: 7% 5% 5%;
-  box-sizing: border-box;
-  animation: breathe 2.2s ease-in-out infinite;
-}
-
-.block::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(100deg, transparent 25%, rgba(255, 255, 255, 0.75) 50%, transparent 75%);
-  transform: translateX(-120%);
-  animation: sweep 2.2s ease-in-out infinite;
-  animation-delay: var(--sweep-delay, 0s);
-}
-
-/* the room's "name" line */
-.blockTitle {
+.plan {
   display: block;
-  width: 55%;
-  max-width: 90px;
-  height: 9px;
-  border-radius: 5px;
-  background: #cfd9e7;
-  flex: none;
+  width: min(46vw, 340px);
+  height: auto;
 }
 
-/* the room's "desks" */
-.dots {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 18%;
-  align-content: flex-start;
+/*
+ * One shared 4.2s cycle, phases baked into the keyframes so every group stays
+ * in sync: walls draw in (0–38%), doors swing in (32–52%), furniture fades up
+ * (46–64%), everything holds, then fades out together (88–100%) and loops.
+ */
+.walls rect,
+.walls path {
+  stroke: #aeb9d2;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: drawWalls 4.2s ease-in-out infinite;
 }
 
-.dot {
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  background: #c4d0e2;
-  animation: dotPulse 1.6s ease-in-out infinite;
+.window {
+  stroke: #cfd8e8;
 }
 
-/* corridor connector lines */
-.line {
-  position: absolute;
-  height: 6px;
-  border-radius: 3px;
-  background: #e0e7f1;
-  animation: breathe 2.2s ease-in-out infinite;
+.doors path {
+  stroke: #bcc6db;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: drawDoors 4.2s ease-in-out infinite;
 }
 
-/* soft full-sheet sweep on top, slower than the per-block ones */
-.shimmer {
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(100deg, transparent 35%, rgba(255, 255, 255, 0.45) 50%, transparent 65%);
-  background-size: 220% 100%;
-  animation: shimmer 2.6s ease-in-out infinite;
+.furniture rect,
+.furniture path,
+.furniture circle {
+  stroke: #b9c3d9;
+  opacity: 0;
+  transform-origin: center;
+  animation: fadeFurniture 4.2s ease-in-out infinite;
 }
 
-@keyframes shimmer {
+@keyframes drawWalls {
   0% {
-    background-position: 190% 0;
-  }
-  100% {
-    background-position: -90% 0;
-  }
-}
-
-@keyframes sweep {
-  0% {
-    transform: translateX(-120%);
-  }
-  55%,
-  100% {
-    transform: translateX(120%);
-  }
-}
-
-@keyframes breathe {
-  0%,
-  100% {
+    stroke-dashoffset: 1;
     opacity: 1;
   }
-  50% {
-    opacity: 0.72;
+  38%,
+  88% {
+    stroke-dashoffset: 0;
+    opacity: 1;
+  }
+  97%,
+  100% {
+    stroke-dashoffset: 0;
+    opacity: 0;
   }
 }
 
-@keyframes dotPulse {
+@keyframes drawDoors {
   0%,
-  100% {
-    transform: scale(1);
+  32% {
+    stroke-dashoffset: 1;
     opacity: 1;
   }
-  50% {
-    transform: scale(0.78);
-    opacity: 0.55;
+  52%,
+  88% {
+    stroke-dashoffset: 0;
+    opacity: 1;
+  }
+  97%,
+  100% {
+    stroke-dashoffset: 0;
+    opacity: 0;
+  }
+}
+
+@keyframes fadeFurniture {
+  0%,
+  46% {
+    opacity: 0;
+  }
+  64%,
+  88% {
+    opacity: 1;
+  }
+  97%,
+  100% {
+    opacity: 0;
+  }
+}
+
+/* indeterminate progress bar, per the design */
+.progressTrack {
+  width: 168px;
+  height: 4px;
+  border-radius: 2px;
+  background: #e3e8f1;
+  overflow: hidden;
+}
+
+.progressBar {
+  width: 64px;
+  height: 100%;
+  border-radius: 2px;
+  background: var(--blue-600);
+  animation: slide 1.3s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite;
+}
+
+@keyframes slide {
+  0% {
+    transform: translateX(-72px);
+  }
+  100% {
+    transform: translateX(176px);
   }
 }
 
 .label {
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: 2px;
   font: 500 13px/1 var(--font-sans);
   color: var(--ink-600);
 }
 
-.spinner {
-  width: 15px;
-  height: 15px;
-  border-radius: 50%;
-  border: 2px solid var(--ink-200);
-  border-top-color: var(--blue-500);
-  animation: spin 0.8s linear infinite;
-}
-
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-/* the "…" — three dots rising in turn after the label text */
 .ellipsis {
   display: inline-flex;
   gap: 3px;
-  margin-left: -4px;
+  margin-left: 4px;
 }
 
 .ellipsis span {
-  width: 4px;
-  height: 4px;
+  width: 3.5px;
+  height: 3.5px;
   border-radius: 50%;
   background: var(--ink-500);
   animation: ellipsisBounce 1.2s ease-in-out infinite;
@@ -184,7 +169,7 @@
     opacity: 0.45;
   }
   30% {
-    transform: translateY(-4px);
+    transform: translateY(-3px);
     opacity: 1;
   }
 }
