@@ -18,14 +18,21 @@ import styles from './MapStage.module.css';
 export function MapStage({ stageRef }: { stageRef: RefObject<HTMLDivElement> }) {
   const { state, actions } = useFloorplan();
   const floor = floorMeta(state, state.floorId)?.floor;
-  const hasContent = state.units.length > 0 || !!state.floorImages[floorImageKey(state.floorId, state.planId)];
+  const isDevMode = import.meta.env.VITE_DEV_MODE === 'true';
+  const hasImage = !!state.floorImages[floorImageKey(state.floorId, state.planId)];
+  // Units alone only justify showing the canvas in dev mode, where the mock tier draws a
+  // schematic background under them. Deployed, a plan without an actual image would render
+  // markers on a blank white sheet — the "empty floorplan" — so there only a real image (or a
+  // real-backend plan-type record, below) counts, and the empty state's upload prompt shows
+  // instead once the shimmer clears.
+  const hasContent = hasImage || (isDevMode && state.units.length > 0);
   // Against the real backend, `state.floorPlanTypes[floorId]` (fetched per-floor on selection)
   // says exactly which plan types have a floor plan configured — once it's in, trust it over
   // the coarse `floor.hasPlan` flag, which describes the floor as a whole rather than the
   // currently-selected plan type. Before it's loaded (undefined) or on the mock tier (never
-  // set), fall back to the old floor-level flag so there's no regression there.
+  // set), fall back to the old floor-level flag — dev only, so a deployed floor never fakes it.
   const configuredTypes = state.floorPlanTypes[state.floorId];
-  const typeConfigured = configuredTypes ? configuredTypes.some((t) => t.id === state.planId) : !!floor?.hasPlan;
+  const typeConfigured = configuredTypes ? configuredTypes.some((t) => t.id === state.planId) : isDevMode && !!floor?.hasPlan;
   const hasPlan = hasContent || typeConfigured;
   // While the real image fetch/render for this floor/plan is in flight, the shimmer skeleton
   // takes over the whole stage — the canvas (and its markers) only appears once the actual plan

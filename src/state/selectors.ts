@@ -38,12 +38,20 @@ export function bookedUnitIds(state: AppState): Set<string> {
   return set;
 }
 
+/**
+ * Desk bookability/assignability follows the real deskType semantics (see lib/types DeskType):
+ * ASSIGNED (or untyped) desks are assignment-only; HOT/HOTEL desks are booking-only. Rooms and
+ * parking stay bookable; lockers stay assignment-only.
+ */
 export function isBookable(u: Unit): boolean {
-  return u.type !== 'locker';
+  if (u.type === 'locker') return false;
+  if (u.type === 'workstation') return u.deskType === 'HOT' || u.deskType === 'HOTEL';
+  return true;
 }
 
 export function isAssignable(u: Unit): boolean {
-  return u.type === 'workstation' || u.type === 'locker' || u.type === 'parking';
+  if (u.type === 'workstation') return (u.deskType ?? 'ASSIGNED') === 'ASSIGNED';
+  return u.type === 'locker' || u.type === 'parking';
 }
 
 export function myAssignedUnit(state: AppState): Unit | null {

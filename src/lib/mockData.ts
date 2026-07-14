@@ -113,6 +113,9 @@ export function seedUnits(): Unit[] {
       room: w[2],
       geom: { kind: 'point', x: w[0], y: w[1] },
       floor: 'hqA3',
+      // Real deskType mix (see lib/types DeskType): most desks permanently ASSIGNED
+      // (assignment-only), every 4th a bookable hot-desk — alternating HOT / HOTEL.
+      deskType: i % 4 === 3 ? (i % 8 === 7 ? 'HOTEL' : 'HOT') : 'ASSIGNED',
     });
   });
   for (let i = 0; i < 8; i++) {

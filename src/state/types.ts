@@ -113,6 +113,12 @@ export interface AppState {
   /** The logged-in user's real assigned/booked desk (from servicePortalHome) — powers "My desk" against the real backend, where `assignments` (mock-derived) can't. */
   myDesk: { recordId: number; name: string; floorId: string | null; booked: boolean } | null;
   floorImages: Record<string, string>;
+  /**
+   * Floors known to have an uploaded floorplan — from the vibe-db file list at boot plus any
+   * upload/load this session. The portfolio tree ORs this with the (static) floor.hasPlan flag
+   * so a floor stops reading "no plan" the moment a plan actually exists for it.
+   */
+  floorsWithPlans: Record<string, true>;
   /** Which plan types actually have a configured floor plan, fetched lazily per-floor on selection (not eagerly for the whole portfolio). */
   floorPlanTypes: Record<string, { id: PlanId; name: string; recordId: number }[]>;
   /** True while a floor/plan-type's real image (or the plan-type list) is being fetched — drives the loading overlay over the canvas. */

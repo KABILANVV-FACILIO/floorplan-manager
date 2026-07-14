@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { MouseEvent as ReactMouseEvent } from 'react';
 import { useFloorplan } from '../../state/FloorplanContext';
-import { conflictsFor, employeeName, floorMeta } from '../../state/selectors';
+import { conflictsFor, employeeName, floorMeta, isBookable } from '../../state/selectors';
 import { fmtTime } from '../../lib/geometry';
 import { dataSource } from '../../lib/dataSource';
 import type { Booking, Unit, UnitType } from '../../lib/types';
@@ -75,7 +75,9 @@ export function BookingsView() {
   const catDef = CATEGORIES.find((c) => c.id === category)!;
 
   const resources = useMemo(
-    () => state.units.filter((u) => u.type === category).sort((a, b) => a.label.localeCompare(b.label, undefined, { numeric: true })),
+    // Only actually bookable units belong on the booking calendar — for desks that's
+    // HOT/HOTEL only (ASSIGNED desks are assignment-only; see lib/types DeskType).
+    () => state.units.filter((u) => u.type === category && isBookable(u)).sort((a, b) => a.label.localeCompare(b.label, undefined, { numeric: true })),
     [state.units, category]
   );
 

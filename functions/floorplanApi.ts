@@ -207,6 +207,16 @@ server.addHandler({
   },
 });
 server.addHandler({
+  name: 'listFloorplanFiles',
+  description: 'Keys (floorId::planId) of every stored floorplan file — lets the portfolio tree flag which floors have plans without fetching any blobs.',
+  parameters: {},
+  execute: async () => {
+    const db = connect();
+    const { rows } = db.query("select key from floorplan_files where key like '%::%' and value is not null and value <> ''", []);
+    return { keys: rows.map((r) => r.key) };
+  },
+});
+server.addHandler({
   name: 'saveFloorplanFile',
   description: 'Upsert a floor+plan floorplan file (JSON string of {dataUrl,fileId,name,mime}).',
   parameters: {

@@ -2,7 +2,7 @@ import { DEFAULT_PERMS, floorImageKey } from '../lib/types';
 import type { Booking, PlanId, Site, Unit } from '../lib/types';
 import { clamp, fitView } from '../lib/geometry';
 import { seedBookings } from '../lib/mockData';
-import { viewFromHash } from '../lib/routes';
+import { viewFromLocation } from '../lib/routes';
 import type { AppState } from './types';
 
 function todayIso(): string {
@@ -98,9 +98,9 @@ export function buildInitialState(): AppState {
     role: 'admin',
     perms: { ...DEFAULT_PERMS },
 
-    // Each bottom-nav view is a hash route (see lib/routes.ts) — boot straight into whatever
-    // the URL says, so a refresh/deep link on #/bookings etc. lands on that tab.
-    activeView: viewFromHash(window.location.hash),
+    // Each bottom-nav view is a path route (see lib/routes.ts) — boot straight into whatever
+    // the URL says, so a refresh/deep link on /bookings etc. lands on that tab.
+    activeView: viewFromLocation(window.location),
     settingsTab: 'permissions',
     moduleColors: {},
     slotGranularity: 30,
@@ -120,6 +120,7 @@ export function buildInitialState(): AppState {
     cadAnalyses: {},
     myDesk: null,
     floorImages: {},
+    floorsWithPlans: {},
     floorPlanTypes: {},
     // Start in the loading state so a fresh load / refresh paints the shimmer immediately, not a
     // blank/placeholder canvas. The mount-time image load clears it in its finally block.
@@ -179,6 +180,7 @@ export type Action =
   | { type: 'SET_PENDING_PLACEMENT'; placement: AppState['pendingPlacement'] }
   | { type: 'PLACE_EXISTING_UNIT'; unitId: string; geom: Unit['geom']; room: string | null }
   | { type: 'APPLY_SETTINGS'; config: import('../lib/settingsStore').SettingsConfig }
+  | { type: 'SET_FLOORS_WITH_PLANS'; floorIds: string[] }
   | { type: 'SET_SETTINGS_TAB'; tab: AppState['settingsTab'] }
   | { type: 'SET_MODULE_COLOR'; key: string; hex: string }
   | { type: 'SET_SLOT_GRANULARITY'; minutes: number }
@@ -443,7 +445,17 @@ export function reducer(state: AppState, action: Action): AppState {
       return { ...state, cadAnalyses };
     }
     case 'SET_FLOOR_IMAGE':
-      return { ...state, floorImages: { ...state.floorImages, [floorImageKey(action.floorId, action.planId)]: action.dataUrl } };
+      return {
+        ...state,
+        floorImages: { ...state.floorImages, [floorImageKey(action.floorId, action.planId)]: action.dataUrl },
+        // A floor with an actual image is a floor with a plan — flip the tree badge immediately.
+        floorsWithPlans: { ...state.floorsWithPlans, [action.floorId]: true },
+      };
+    case 'SET_FLOORS_WITH_PLANS': {
+      const next = { ...state.floorsWithPlans };
+      for (const id of action.floorIds) next[id] = true;
+      return { ...state, floorsWithPlans: next };
+    }
     case 'SET_FLOOR_PLAN_TYPES':
       return { ...state, floorPlanTypes: { ...state.floorPlanTypes, [action.floorId]: action.types } };
     case 'SET_FLOOR_IMAGE_LOADING':

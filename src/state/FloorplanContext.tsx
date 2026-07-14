@@ -7,9 +7,9 @@ import type { Booking, PlanId, Role, Site, Unit, UnitType } from '../lib/types';
 import type { CadGroup } from '../lib/cadAnalyze';
 import { isFacilioApiConfigured } from '../lib/facilioApi';
 import { assignUnitReal, createRealBooking, fetchFloorplanImage, fetchMyDesk, findUnitIdForDeskRecord, getFloorPlanSummary, saveFloorplanMarkers, vacateUnitReal } from '../lib/facilioApiDataSource';
-import { loadFloorplanFile, persistFloorplanFile } from '../lib/floorplanFileStore';
+import { listFloorplanFloorIds, loadFloorplanFile, persistFloorplanFile } from '../lib/floorplanFileStore';
 import { loadSettings, saveSettings, settingsFromState } from '../lib/settingsStore';
-import { hashForView, viewFromHash } from '../lib/routes';
+import { pathForView, viewFromLocation } from '../lib/routes';
 import { buildInitialState, reducer } from './reducer';
 import type { Action } from './reducer';
 import type { AppState } from './types';
@@ -316,6 +316,9 @@ function buildActions(state: AppState, dispatch: Dispatch<Action>, canvasRectRef
         geom: { kind: 'point', x, y },
         floor: state.floorId,
         plan: type,
+        // New desks start ASSIGNED (the backend default) — switch to HOT/HOTEL in the
+        // Selection panel to make them bookable instead of assignable.
+        ...(type === 'workstation' ? { deskType: 'ASSIGNED' as const } : {}),
       };
       dispatch({ type: 'ADD_UNIT', unit });
       dispatch({ type: 'SET_PENDING_PLACEMENT', placement: null });
@@ -769,19 +772,30 @@ export function FloorplanProvider({ children }: { children: ReactNode }) {
   const settingsLoadedRef = useRef(false);
   const saveTimer = useRef<ReturnType<typeof setTimeout>>();
 
-  // Hash-route sync (see lib/routes.ts): state.activeView is the source of truth, mirrored to
-  // the URL hash so each bottom-nav view is a real route. Nav clicks push a history entry;
-  // back/forward (and hand-edited hashes) come back in via hashchange. The reducer's
-  // SET_ACTIVE_VIEW is idempotent, so the two directions can't loop.
+  // Path-route sync (see lib/routes.ts): state.activeView is the source of truth, pushed to
+  // history (/bookings, /people, /settings — real files on the host via copy-route-pages) so
+  // each bottom-nav view is a clean URL. Nav clicks push a history entry; back/forward come
+  // back in via popstate. The reducer's SET_ACTIVE_VIEW is idempotent, so no loops. A legacy
+  // #/x hash link resolves via viewFromLocation and gets normalized to its path form here.
   useEffect(() => {
-    if (viewFromHash(window.location.hash) !== state.activeView) {
-      window.location.hash = hashForView(state.activeView);
+    if (viewFromLocation(window.location) !== state.activeView) {
+      window.history.pushState({}, '', pathForView(state.activeView));
+    } else if (window.location.hash) {
+      window.history.replaceState({}, '', pathForView(state.activeView));
     }
   }, [state.activeView]);
   useEffect(() => {
-    const onHashChange = () => dispatch({ type: 'SET_ACTIVE_VIEW', view: viewFromHash(window.location.hash) });
-    window.addEventListener('hashchange', onHashChange);
-    return () => window.removeEventListener('hashchange', onHashChange);
+    const onPopState = () => dispatch({ type: 'SET_ACTIVE_VIEW', view: viewFromLocation(window.location) });
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, []);
+
+  // Which floors have a stored floorplan (vibe-db, deployed only) — flags the portfolio tree
+  // so an uploaded floor stops reading "no plan" after a refresh, without fetching any blobs.
+  useEffect(() => {
+    listFloorplanFloorIds().then((floorIds) => {
+      if (floorIds.length) dispatch({ type: 'SET_FLOORS_WITH_PLANS', floorIds });
+    });
   }, []);
 
   // Load persisted settings (vibe-db when deployed, else localStorage) once on mount.

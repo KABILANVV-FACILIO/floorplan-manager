@@ -49,7 +49,11 @@ export function PortfolioTree() {
       });
       if (!buildingExpanded) continue;
       for (const floor of building.floors) {
-        const count = floor.hasPlan ? state.units.filter((u) => u.floor === floor.id).length : 0;
+        // A floor "has a plan" if the static portfolio flag says so OR an actual floorplan is
+        // known for it (uploaded this session, or listed from the vibe-db file store at boot) —
+        // without the OR, a freshly-uploaded floor kept reading "no plan" in this tree.
+        const hasPlan = !!floor.hasPlan || !!state.floorsWithPlans[floor.id];
+        const count = hasPlan ? state.units.filter((u) => u.floor === floor.id).length : 0;
         items.push({
           id: floor.id,
           name: floor.name,
@@ -58,8 +62,8 @@ export function PortfolioTree() {
           hasChildren: false,
           expanded: false,
           active: state.floorId === floor.id,
-          badge: floor.hasPlan ? `${floor.id === state.floorId ? state.units.length : count} units` : 'no plan',
-          drillIn: !!floor.hasPlan,
+          badge: hasPlan ? `${floor.id === state.floorId ? state.units.length : count} units` : 'no plan',
+          drillIn: hasPlan,
           onClick: () => {
             actions.selectFloor(floor.id);
             actions.setNavView('spaces');

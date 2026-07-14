@@ -50,6 +50,23 @@ export async function loadFloorplanFile(floorId: string, planId: string): Promis
 }
 
 /**
+ * Floor ids that have at least one stored floorplan file — keys only, no blobs. Lets the
+ * portfolio tree stop showing "no plan" for floors whose upload lives in the Vibe DB.
+ */
+export async function listFloorplanFloorIds(): Promise<string[]> {
+  if (isDevMode) return [];
+  try {
+    const res = await vibe.executeFunction<{ keys?: string[] }>(FN_NAME, 'listFloorplanFiles', {});
+    const keys = res?.keys ?? [];
+    return [...new Set(keys.map((k) => k.split('::')[0]).filter(Boolean))];
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn('[floorplanFile] vibe-db list failed', err);
+    return [];
+  }
+}
+
+/**
  * Persists an uploaded floorplan file so the deployed app reloads it after a refresh.
  * Best-effort: a failure is swallowed (the in-memory preview still shows for this session).
  */

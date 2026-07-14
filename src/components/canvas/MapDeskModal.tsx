@@ -48,6 +48,7 @@ export function MapDeskModal() {
           >
             <span>
               {u.label}
+              {u.type === 'workstation' ? <span style={{ color: 'var(--ink-500)', fontWeight: 400 }}> · {u.deskType ?? 'ASSIGNED'}</span> : null}
               {u.secondary ? <span style={{ color: 'var(--ink-500)', fontWeight: 400 }}> · {u.secondary}</span> : null}
             </span>
             <span style={{ color: 'var(--blue-600)', fontSize: 12, fontWeight: 600, flexShrink: 0 }}>Assign here</span>

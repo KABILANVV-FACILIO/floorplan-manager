@@ -2,8 +2,8 @@ import type { ReactNode } from 'react';
 import { useFloorplan } from '../../state/FloorplanContext';
 import { unitById } from '../../state/selectors';
 import { polyAreaM2 } from '../../lib/geometry';
-import { floorImageKey, TYPE_META } from '../../lib/types';
-import type { EditTool } from '../../lib/types';
+import { DESK_TYPES, floorImageKey, TYPE_META } from '../../lib/types';
+import type { DeskType, EditTool } from '../../lib/types';
 import { Button } from '../primitives/Button';
 import card from './Card.module.css';
 import styles from './EditPanel.module.css';
@@ -137,6 +137,23 @@ export function EditPanel() {
                   Seat type
                 </label>
                 <input className={card.input} value={sel.secondary ?? ''} onChange={(e) => actions.updateUnit(sel.id, { secondary: e.target.value })} />
+                <label className={card.label} style={{ marginTop: 10 }}>
+                  Desk type
+                </label>
+                {/* Real deskType semantics (Context/Workplace_spaceModules.md): ASSIGNED desks are
+                    assignment-only; HOT/HOTEL desks are booking-only. Changing this immediately
+                    regates the assign/book flows for this marker. */}
+                <select
+                  className={card.input}
+                  value={sel.deskType ?? 'ASSIGNED'}
+                  onChange={(e) => actions.updateUnit(sel.id, { deskType: e.target.value as DeskType })}
+                >
+                  {DESK_TYPES.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name} {t.id === 'ASSIGNED' ? '— assignable, not bookable' : '— bookable, not assignable'}
+                    </option>
+                  ))}
+                </select>
               </>
             )}
             <div className={card.statRow}>
