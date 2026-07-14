@@ -11,8 +11,8 @@ import { MobileTimePicker } from './MobileTimePicker';
 import { MobileQrScanner } from './MobileQrScanner';
 import { MobileSpacesSheet } from './MobileSpacesSheet';
 import { FloorplanSkeleton } from '../canvas/FloorplanSkeleton';
-import { unitStatus } from '../../lib/unitStatus';
-import { employeeName, initials, myAssignedUnit } from '../../state/selectors';
+import { markerStyle } from '../../lib/unitStatus';
+import { employeeName, myAssignedUnit } from '../../state/selectors';
 import { floorImageKey } from '../../lib/types';
 import type { Unit } from '../../lib/types';
 import styles from './MobileApp.module.css';
@@ -326,7 +326,7 @@ function MobileMap({
               <g key={r.id}>
                 <polygon
                   points={r.geom.pts.map(([x, y]) => `${x * IMG_W},${y * IMG_H}`).join(' ')}
-                  fill={roomFill(state.mode, state.bookings, r.id, state.date, state.start, state.end)}
+                  fill={roomFill(state.mobileTab, state.bookings, r.id, state.date, state.start, state.end, selected)}
                   stroke={selected ? 'var(--blue-600)' : 'rgba(96,119,150,0.5)'}
                   strokeWidth={(selected ? 3 : 1.5) * scale}
                   style={{ cursor: 'pointer' }}
@@ -338,11 +338,11 @@ function MobileMap({
                   y={c.y * IMG_H}
                   textAnchor="middle"
                   dominantBaseline="middle"
-                  fontSize={13 * scale}
-                  fontWeight={600}
-                  fill="var(--ink-700)"
+                  fontSize={Math.min(15 * scale, 34)}
+                  fontWeight={700}
+                  fill="var(--ink-900)"
                   stroke="#fff"
-                  strokeWidth={3.5 * scale}
+                  strokeWidth={Math.min(5 * scale, 11)}
                   paintOrder="stroke"
                   style={{ pointerEvents: 'none', fontFamily: 'var(--font-sans)' }}
                 >
@@ -357,6 +357,9 @@ function MobileMap({
           const selected = state.mobSel === m.id;
           const empId = state.assignments[m.id];
           const emp = empId ? employeeName(state, empId) : null;
+          // Same palette as the web: markerStyle keyed on a mode synced to the
+          // mobile tab, so bg / border / fill are identical across views.
+          const ms = markerStyle({ ...state, mode: state.mobileTab } as typeof state, m);
           // labels appear once zoomed in enough to not collide; the selected pin always shows
           const showLabel = v.z >= 0.5 || selected;
           return (
@@ -374,16 +377,19 @@ function MobileMap({
               <span
                 className={styles.markerDot}
                 style={{
-                  background: dotColorFor(state, m, (id) => employeeName(state, id)),
-                  boxShadow: selected ? '0 0 0 3px rgba(0,89,214,0.35)' : '0 0 0 1.5px #fff',
+                  background: ms.bg,
+                  border: `2px solid ${ms.bd}`,
+                  color: ms.fg,
+                  borderRadius: m.type === 'parking' ? '999px' : m.type === 'locker' ? '5px' : '7px',
+                  boxShadow: selected ? '0 0 0 3px rgba(0,89,214,0.35)' : 'var(--shadow-xs)',
                 }}
               >
-                {emp ? initials(emp) : ''}
+                {ms.occText ?? ''}
               </span>
               {showLabel && (
                 <span className={styles.markerLabel}>
-                  {m.label}
-                  {emp ? ` · ${emp.split(' ')[0]}` : ''}
+                  <span className={styles.markerLabelName}>{m.label}</span>
+                  {emp && <span className={styles.markerLabelSub}>{emp}</span>}
                 </span>
               )}
             </button>
@@ -427,24 +433,13 @@ function TimeField({ label, value, active, onClick }: { label: string; value: nu
   );
 }
 
-function roomFill(mode: string, bookings: any[], unitId: string, date: string, start: number, end: number) {
-  if (mode === 'book') {
+// Matches the web RoomPolygon fills exactly (keyed on the mobile tab, which
+// is the mobile equivalent of the desktop mode).
+function roomFill(tab: string, bookings: any[], unitId: string, date: string, start: number, end: number, selected: boolean) {
+  if (tab === 'book') {
     const booked = bookings.some((b) => b.unitId === unitId && b.date === date && b.start < end && b.end > start);
-    return booked ? 'rgba(182,25,25,0.18)' : 'rgba(41,160,30,0.16)';
+    const base = booked ? '182,25,25' : '41,160,30';
+    return `rgba(${base},${selected ? 0.26 : 0.14})`;
   }
-  return 'rgba(96,119,150,0.1)';
-}
-
-// Shares the web's darker palette (unitStatus keys) so the two views match.
-function dotColorFor(state: any, unit: any, employeeName: (id: string) => string) {
-  if (unit.type === 'amenity') return 'var(--ink-500)';
-  const status = unitStatus(state, unit, employeeName);
-  if (state.mobileTab === 'assign') {
-    if (unit.type === 'room') return 'var(--ink-400)';
-    if (status.key === 'na') return 'var(--ink-500)';
-    return status.key === 'assigned' ? 'var(--blue-500)' : 'var(--success-600)';
-  }
-  // book tab
-  if (status.key === 'notBookable') return 'var(--ink-500)'; // assigned desks: visible grey, not hidden
-  return status.key === 'booked' ? 'var(--danger-600)' : 'var(--success-600)';
+  return 'rgba(96,119,150,0.07)';
 }
