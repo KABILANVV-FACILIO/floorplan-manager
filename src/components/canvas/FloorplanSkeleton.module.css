@@ -1,3 +1,5 @@
+/* Ported from .design-src/Floorplan Loader.dc.html — keyframe names/timings 1:1. */
+
 .wrap {
   position: absolute;
   inset: 0;
@@ -5,129 +7,140 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 20px;
+  gap: 34px;
   padding: 48px;
+  background: #f7f9fc;
 }
 
 .card {
+  position: relative;
+  width: min(62vw, 432px);
+  aspect-ratio: 432 / 312;
   background: #fff;
+  border: 1px solid var(--ink-200, #d8e3f1);
   border-radius: 16px;
-  box-shadow: 0 6px 24px rgba(23, 34, 59, 0.08), 0 1px 3px rgba(23, 34, 59, 0.06);
-  padding: 26px 30px;
+  box-shadow: 0 14px 38px rgba(40, 54, 72, 0.1);
+  overflow: hidden;
 }
 
 .plan {
-  display: block;
-  width: min(46vw, 340px);
-  height: auto;
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
 }
 
-/*
- * One shared 4.2s cycle, phases baked into the keyframes so every group stays
- * in sync: walls draw in (0–38%), doors swing in (32–52%), furniture fades up
- * (46–64%), everything holds, then fades out together (88–100%) and loops.
- */
-.walls rect,
-.walls path {
-  stroke: #aeb9d2;
-  stroke-dasharray: 1;
-  stroke-dashoffset: 1;
-  animation: drawWalls 4.2s ease-in-out infinite;
+/* walls: stroke draw-in (dasharray/offset set as SVG attrs per element) */
+.draw {
+  animation: fplDraw var(--dur, 0.8s) cubic-bezier(0.2, 0, 0, 1) var(--delay, 0s) forwards;
 }
 
-.window {
-  stroke: #cfd8e8;
+.drawEase {
+  animation: fplDraw var(--dur, 0.45s) ease var(--delay, 0s) forwards;
 }
 
-.doors path {
-  stroke: #bcc6db;
-  stroke-dasharray: 1;
-  stroke-dashoffset: 1;
-  animation: drawDoors 4.2s ease-in-out infinite;
+@keyframes fplDraw {
+  to {
+    stroke-dashoffset: 0;
+  }
 }
 
-.furniture rect,
-.furniture path,
-.furniture circle {
-  stroke: #b9c3d9;
+/* first-pass reveal, then settle into a gentle looping shimmer */
+.rise {
   opacity: 0;
-  transform-origin: center;
-  animation: fadeFurniture 4.2s ease-in-out infinite;
+  animation:
+    fplRise 0.5s cubic-bezier(0.2, 0, 0, 1) var(--delay, 0s) forwards,
+    fplWave 2.8s ease-in-out 2s infinite;
 }
 
-@keyframes drawWalls {
+@keyframes fplRise {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes fplWave {
+  0%,
+  100% {
+    opacity: 0.4;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+/* scan beam sweeping the card */
+.beamBand {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 120px;
+  margin-left: -60px;
+  background: linear-gradient(
+    90deg,
+    rgba(0, 89, 214, 0) 0%,
+    rgba(0, 89, 214, 0.1) 46%,
+    rgba(0, 89, 214, 0.16) 50%,
+    rgba(0, 89, 214, 0.1) 54%,
+    rgba(0, 89, 214, 0) 100%
+  );
+  animation: fplBeam 2.6s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+}
+
+.beamLine {
+  position: absolute;
+  top: 14px;
+  bottom: 14px;
+  width: 2px;
+  margin-left: -1px;
+  background: linear-gradient(180deg, rgba(0, 89, 214, 0), var(--blue-500, #0059d6), rgba(0, 89, 214, 0));
+  box-shadow: 0 0 10px rgba(0, 89, 214, 0.55);
+  animation: fplBeam 2.6s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+}
+
+@keyframes fplBeam {
   0% {
-    stroke-dashoffset: 1;
-    opacity: 1;
+    left: -14%;
   }
-  38%,
-  88% {
-    stroke-dashoffset: 0;
-    opacity: 1;
-  }
-  97%,
   100% {
-    stroke-dashoffset: 0;
-    opacity: 0;
+    left: 104%;
   }
 }
 
-@keyframes drawDoors {
-  0%,
-  32% {
-    stroke-dashoffset: 1;
-    opacity: 1;
-  }
-  52%,
-  88% {
-    stroke-dashoffset: 0;
-    opacity: 1;
-  }
-  97%,
-  100% {
-    stroke-dashoffset: 0;
-    opacity: 0;
-  }
+.footer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
 }
 
-@keyframes fadeFurniture {
-  0%,
-  46% {
-    opacity: 0;
-  }
-  64%,
-  88% {
-    opacity: 1;
-  }
-  97%,
-  100% {
-    opacity: 0;
-  }
-}
-
-/* indeterminate progress bar, per the design */
 .progressTrack {
-  width: 168px;
-  height: 4px;
-  border-radius: 2px;
-  background: #e3e8f1;
+  position: relative;
+  width: 220px;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--ink-100, #e9eff7);
   overflow: hidden;
 }
 
 .progressBar {
-  width: 64px;
-  height: 100%;
-  border-radius: 2px;
-  background: var(--blue-600);
-  animation: slide 1.3s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite;
+  position: absolute;
+  inset: 0;
+  width: 45%;
+  border-radius: 999px;
+  background: var(--blue-500, #0059d6);
+  animation: fplBar 1.5s cubic-bezier(0.4, 0, 0.2, 1) infinite;
 }
 
-@keyframes slide {
+@keyframes fplBar {
   0% {
-    transform: translateX(-72px);
+    transform: translateX(-100%);
   }
   100% {
-    transform: translateX(176px);
+    transform: translateX(222%);
   }
 }
 
@@ -135,41 +148,37 @@
   display: flex;
   align-items: center;
   gap: 2px;
-  font: 500 13px/1 var(--font-sans);
-  color: var(--ink-600);
+  height: 20px;
+  font: 500 14px/1 var(--font-sans, 'Roboto', sans-serif);
+  color: var(--ink-700, #40536e);
 }
 
-.ellipsis {
-  display: inline-flex;
-  gap: 3px;
-  margin-left: 4px;
+.message {
+  animation: fplTextIn 0.32s cubic-bezier(0.2, 0, 0, 1);
 }
 
-.ellipsis span {
-  width: 3.5px;
-  height: 3.5px;
-  border-radius: 50%;
-  background: var(--ink-500);
-  animation: ellipsisBounce 1.2s ease-in-out infinite;
-}
-
-.ellipsis span:nth-child(2) {
-  animation-delay: 0.15s;
-}
-
-.ellipsis span:nth-child(3) {
-  animation-delay: 0.3s;
-}
-
-@keyframes ellipsisBounce {
-  0%,
-  60%,
-  100% {
-    transform: translateY(0);
-    opacity: 0.45;
+@keyframes fplTextIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
   }
-  30% {
-    transform: translateY(-3px);
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.msgDot {
+  animation: fplDots 1.4s ease var(--delay, 0s) infinite;
+}
+
+@keyframes fplDots {
+  0%,
+  80%,
+  100% {
+    opacity: 0.25;
+  }
+  40% {
     opacity: 1;
   }
 }

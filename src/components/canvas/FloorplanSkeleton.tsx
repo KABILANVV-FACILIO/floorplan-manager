@@ -1,84 +1,211 @@
+import { useEffect, useState } from 'react';
 import styles from './FloorplanSkeleton.module.css';
 
 /**
- * Loader per the "Floorplan Loader" design: a blueprint-style plan sketch in
- * a white card that draws itself in (walls → doors → furniture), then softly
- * fades and loops, over an indeterminate progress bar and a label. All paths
- * use pathLength=1 so the stroke-draw keyframes share the same dash math.
+ * Ported 1:1 from the "Floorplan Loader" design (.design-src/Floorplan
+ * Loader.dc.html): a blueprint card whose walls draw in once (outer wall
+ * first, interior walls staggered), door swings and furniture rise in and
+ * settle into a gentle shimmer, a blue scan beam sweeps the card, and the
+ * status line rotates through loading messages with pulsing dots. Per-element
+ * timing rides CSS custom properties (--dur/--delay) since module-scoped
+ * keyframes can't be referenced from inline animation shorthands.
  */
+const MESSAGES = [
+  'Loading floor plan',
+  'Setting up your space',
+  'Placing rooms and furniture',
+  'Syncing live availability',
+  'Almost ready',
+];
+
+/** interior wall segment: [d, dash, duration s, delay s] */
+const WALLS: [string, number, number, number][] = [
+  ['M160 40 V92', 200, 0.8, 0.5],
+  ['M160 124 V272', 200, 0.95, 0.62],
+  ['M278 40 V92', 200, 0.8, 0.58],
+  ['M278 120 V196', 200, 0.8, 0.7],
+  ['M278 224 V272', 200, 0.7, 0.8],
+  ['M40 176 H96', 200, 0.8, 0.72],
+  ['M128 176 H160', 120, 0.6, 0.84],
+  ['M160 160 H205', 120, 0.7, 0.8],
+  ['M235 160 H278', 120, 0.6, 0.9],
+  ['M278 176 H300', 120, 0.6, 0.86],
+  ['M330 176 H392', 120, 0.7, 0.96],
+];
+
+/** door swing arc: [d, dash, delay s] */
+const DOORS: [string, number, number][] = [
+  ['M160 124 A32 32 0 0 0 192 92', 60, 1.5],
+  ['M160 176 A32 32 0 0 1 128 208', 60, 1.6],
+  ['M278 92 A30 30 0 0 1 248 122', 58, 1.55],
+  ['M278 196 A28 28 0 0 0 306 224', 54, 1.65],
+  ['M205 160 A30 30 0 0 1 235 190', 58, 1.6],
+];
+
+function delay(s: number) {
+  return { ['--delay' as string]: `${s}s` };
+}
+
 export function FloorplanSkeleton() {
+  const [i, setI] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => setI((v) => (v + 1) % MESSAGES.length), 1900);
+    return () => clearInterval(t);
+  }, []);
+
   return (
     <div className={styles.wrap}>
       <div className={styles.card}>
-        <svg className={styles.plan} viewBox="0 0 360 260" fill="none" aria-hidden>
-          {/* outer + inner walls */}
-          <g className={styles.walls} strokeLinecap="round">
-            <rect x="22" y="20" width="316" height="206" rx="4" strokeWidth="7" pathLength="1" />
-            {/* top-half dividers with door gaps */}
-            <path d="M148 20v58 m0 26v22" strokeWidth="3" pathLength="1" />
-            <path d="M236 20v34 m0 26v46" strokeWidth="3" pathLength="1" />
-            {/* horizontal divider with two door gaps */}
-            <path d="M22 126h64 m24 0h96 m26 0h58 m24 0h24" strokeWidth="3" pathLength="1" />
-            {/* bottom-half dividers */}
-            <path d="M134 126v38 m0 26v36" strokeWidth="3" pathLength="1" />
-            <path d="M228 126v20 m0 26v54" strokeWidth="3" pathLength="1" />
-            {/* window notches on the outer wall */}
-            <path d="M70 20h34 M196 20h30 M22 84v28 M338 96v30 M120 226h36 M252 226h34" strokeWidth="3" className={styles.window} pathLength="1" />
+        <svg viewBox="0 0 432 312" fill="none" className={styles.plan} aria-hidden>
+          {/* room zone tints */}
+          <g className={styles.rise} style={delay(1.5)}>
+            <rect x="40" y="40" width="120" height="120" fill="rgba(0,89,214,0.03)" />
+            <rect x="278" y="40" width="114" height="120" fill="rgba(46,209,255,0.045)" />
+            <rect x="278" y="176" width="114" height="96" fill="rgba(41,160,30,0.04)" />
           </g>
 
-          {/* door swings */}
-          <g className={styles.doors} strokeWidth="2">
-            <path d="M148 78a26 26 0 0 1 26 26" pathLength="1" />
-            <path d="M236 54a26 26 0 0 1 26 26" pathLength="1" />
-            <path d="M86 126a24 24 0 0 1 24 -24" pathLength="1" />
-            <path d="M206 126a26 26 0 0 1 26 -26" pathLength="1" />
-            <path d="M134 164a26 26 0 0 1 26 26" pathLength="1" />
-            <path d="M228 146a20 20 0 0 1 20 20" pathLength="1" />
+          {/* interior walls (draw in) */}
+          <g stroke="#98A4B8" strokeWidth="7" strokeLinecap="butt">
+            {WALLS.map(([d, dash, dur, del]) => (
+              <path
+                key={d}
+                d={d}
+                strokeDasharray={dash}
+                strokeDashoffset={dash}
+                className={styles.draw}
+                style={{ ['--dur' as string]: `${dur}s`, ['--delay' as string]: `${del}s` }}
+              />
+            ))}
           </g>
 
-          {/* furniture, room by room */}
-          <g className={styles.furniture} strokeWidth="2.5" strokeLinejoin="round">
-            {/* living room (top-left): sofa + rug + side table */}
-            <rect x="40" y="40" width="52" height="20" rx="4" />
-            <path d="M46 40v-6h40v6" />
-            <circle cx="66" cy="92" r="14" />
-            <rect x="112" y="38" width="22" height="14" rx="2" />
-            {/* bathroom (top-middle): tub + sink */}
-            <rect x="162" y="36" width="20" height="42" rx="8" />
-            <circle cx="212" cy="46" r="8" />
-            <rect x="202" y="66" width="22" height="14" rx="3" />
-            {/* bedroom (top-right): bed + pillows + wardrobe */}
-            <rect x="254" y="36" width="52" height="40" rx="3" />
-            <rect x="258" y="40" width="18" height="12" rx="2" />
-            <rect x="280" y="40" width="18" height="12" rx="2" />
-            <rect x="312" y="90" width="16" height="30" rx="2" />
-            {/* bedroom 2 (bottom-left): bed */}
-            <rect x="42" y="146" width="46" height="56" rx="3" />
-            <rect x="46" y="150" width="16" height="12" rx="2" />
-            {/* dining (bottom-middle): table + chairs */}
-            <rect x="158" y="158" width="46" height="30" rx="3" />
-            <rect x="166" y="146" width="12" height="8" rx="2" />
-            <rect x="186" y="146" width="12" height="8" rx="2" />
-            <rect x="166" y="192" width="12" height="8" rx="2" />
-            <rect x="186" y="192" width="12" height="8" rx="2" />
-            {/* study (bottom-right): desk + chair */}
-            <rect x="248" y="180" width="56" height="16" rx="2" />
-            <circle cx="276" cy="164" r="8" />
+          {/* outer wall (draws first, sits on top) */}
+          <rect
+            x="40"
+            y="40"
+            width="352"
+            height="232"
+            rx="3"
+            stroke="#7E8CA3"
+            strokeWidth="9"
+            strokeLinejoin="round"
+            strokeDasharray={1200}
+            strokeDashoffset={1200}
+            className={styles.draw}
+            style={{ ['--dur' as string]: '1.5s', ['--delay' as string]: '0s' }}
+          />
+
+          {/* windows cut into the outer wall */}
+          <g className={styles.rise} style={delay(1.5)}>
+            <rect x="86" y="35.5" width="42" height="9" fill="#fff" />
+            <rect x="88" y="38.5" width="38" height="3" rx="1.5" fill="#E3E9F2" />
+            <rect x="196" y="35.5" width="42" height="9" fill="#fff" />
+            <rect x="198" y="38.5" width="38" height="3" rx="1.5" fill="#E3E9F2" />
+            <rect x="306" y="35.5" width="42" height="9" fill="#fff" />
+            <rect x="308" y="38.5" width="38" height="3" rx="1.5" fill="#E3E9F2" />
+            <rect x="35.5" y="96" width="9" height="42" fill="#fff" />
+            <rect x="38.5" y="98" width="3" height="38" rx="1.5" fill="#E3E9F2" />
+            <rect x="387.5" y="200" width="9" height="42" fill="#fff" />
+            <rect x="390.5" y="202" width="3" height="38" rx="1.5" fill="#E3E9F2" />
+            <rect x="196" y="267.5" width="42" height="9" fill="#fff" />
+            <rect x="198" y="270.5" width="38" height="3" rx="1.5" fill="#E3E9F2" />
+          </g>
+
+          {/* door swing arcs */}
+          <g stroke="#B4BFD0" strokeWidth="1.4" fill="none">
+            {DOORS.map(([d, dash, del]) => (
+              <path
+                key={d}
+                d={d}
+                strokeDasharray={dash}
+                strokeDashoffset={dash}
+                className={styles.drawEase}
+                style={{ ['--dur' as string]: '0.45s', ['--delay' as string]: `${del}s` }}
+              />
+            ))}
+          </g>
+
+          {/* furniture */}
+          <g stroke="#C4CEDD" strokeWidth="1.4" fill="#F2F5FA" strokeLinejoin="round">
+            {/* living: sofa + coffee table + plant */}
+            <g className={styles.rise} style={delay(1.15)}>
+              <rect x="54" y="54" width="52" height="22" rx="3" />
+              <rect x="57" y="50" width="46" height="7" rx="2.5" />
+              <line x1="80" y1="56" x2="80" y2="74" />
+            </g>
+            <g className={styles.rise} style={delay(1.24)}>
+              <circle cx="72" cy="112" r="14" />
+            </g>
+            <g className={styles.rise} style={{ ...delay(1.32), fill: 'none', stroke: '#B9C6D9' }}>
+              <circle cx="124" cy="100" r="3.5" fill="#EAF1FA" />
+              <path d="M124 100 L124 90 M124 100 L133 96 M124 100 L131 108 M124 100 L117 108 M124 100 L115 96" />
+              <rect x="120" y="112" width="8" height="7" rx="1" fill="#F2F5FA" />
+            </g>
+            {/* bathroom: tub + toilet + sink */}
+            <g className={styles.rise} style={delay(1.2)}>
+              <rect x="170" y="52" width="26" height="52" rx="8" />
+              <rect x="174" y="60" width="18" height="40" rx="6" fill="#fff" />
+            </g>
+            <g className={styles.rise} style={delay(1.28)}>
+              <rect x="230" y="52" width="20" height="9" rx="2" />
+              <ellipse cx="240" cy="70" rx="10" ry="11" />
+            </g>
+            <g className={styles.rise} style={delay(1.36)}>
+              <rect x="228" y="92" width="26" height="16" rx="3" />
+              <ellipse cx="241" cy="100" rx="7" ry="5" fill="#fff" />
+            </g>
+            {/* bedroom 1 (top-right) */}
+            <g className={styles.rise} style={delay(1.3)}>
+              <rect x="316" y="54" width="58" height="44" rx="3" />
+              <rect x="320" y="58" width="50" height="14" rx="2" fill="#fff" />
+              <rect x="352" y="52" width="12" height="10" rx="2" />
+            </g>
+            {/* bedroom 2 (bottom-left) */}
+            <g className={styles.rise} style={delay(1.4)}>
+              <rect x="56" y="196" width="46" height="60" rx="3" />
+              <rect x="60" y="200" width="38" height="14" rx="2" fill="#fff" />
+            </g>
+            {/* dining: table + chairs */}
+            <g className={styles.rise} style={delay(1.34)}>
+              <rect x="196" y="204" width="46" height="30" rx="4" />
+              <rect x="200" y="192" width="16" height="9" rx="2" />
+              <rect x="222" y="192" width="16" height="9" rx="2" />
+              <rect x="200" y="237" width="16" height="9" rx="2" />
+              <rect x="222" y="237" width="16" height="9" rx="2" />
+            </g>
+            {/* kitchen: counter + stove + sink */}
+            <g className={styles.rise} style={delay(1.44)}>
+              <rect x="300" y="240" width="86" height="20" rx="2" />
+              <rect x="366" y="196" width="20" height="44" rx="2" />
+              <rect x="312" y="244" width="18" height="12" rx="2" fill="#fff" />
+              <circle cx="352" cy="250" r="3.5" />
+              <circle cx="362" cy="250" r="3.5" />
+              <circle cx="352" cy="256" r="2.6" />
+              <ellipse cx="376" cy="212" rx="6" ry="8" fill="#fff" />
+            </g>
           </g>
         </svg>
+
+        {/* scan beam */}
+        <div className={styles.beamBand} />
+        <div className={styles.beamLine} />
       </div>
 
-      <div className={styles.progressTrack}>
-        <div className={styles.progressBar} />
-      </div>
-
-      <div className={styles.label}>
-        <span>Loading floor plan</span>
-        <span className={styles.ellipsis}>
-          <span />
-          <span />
-          <span />
-        </span>
+      <div className={styles.footer}>
+        <div className={styles.progressTrack}>
+          <div className={styles.progressBar} />
+        </div>
+        <div className={styles.label}>
+          <span key={i} className={styles.message}>
+            {MESSAGES[i]}
+          </span>
+          <span className={styles.msgDot}>.</span>
+          <span className={styles.msgDot} style={delay(0.2)}>
+            .
+          </span>
+          <span className={styles.msgDot} style={delay(0.4)}>
+            .
+          </span>
+        </div>
       </div>
     </div>
   );
