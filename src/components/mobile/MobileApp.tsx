@@ -137,29 +137,6 @@ export function MobileApp({ mode, onClose }: MobileAppProps) {
           <MobileTimePicker />
           <MobileFloorPicker />
           <MobileUnitSheet />
-
-          <div className={styles.bottomBar}>
-            <div className={[styles.bottomItem, styles.bottomItemActive].join(' ')}>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M9 3L4 5v16l5-2 6 2 5-2V3l-5 2-6-2z M9 3v16M15 5v16" />
-              </svg>
-              <span>Map</span>
-            </div>
-            <div className={styles.bottomItem}>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="3" y="4" width="18" height="17" rx="2" />
-                <path d="M16 2v4M8 2v4M3 10h18" />
-              </svg>
-              <span>Bookings</span>
-            </div>
-            <div className={styles.bottomItem}>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="12" cy="8" r="4" />
-                <path d="M4 21c0-4 4-6 8-6s8 2 8 6" />
-              </svg>
-              <span>Me</span>
-            </div>
-          </div>
         </div>
       </div>
     </div>
