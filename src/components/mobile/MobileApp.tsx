@@ -392,7 +392,9 @@ function MobileMap({
                   background: ms.bg,
                   border: `2px solid ${ms.bd}`,
                   color: ms.fg,
-                  borderRadius: m.type === 'parking' ? '999px' : m.type === 'locker' ? '5px' : '7px',
+                  // Mobile keeps circular dots (clearer at small size) while
+                  // still using the web's bg/border colors.
+                  borderRadius: '999px',
                   boxShadow: selected ? '0 0 0 3px rgba(0,89,214,0.35)' : 'var(--shadow-xs)',
                 }}
               >
