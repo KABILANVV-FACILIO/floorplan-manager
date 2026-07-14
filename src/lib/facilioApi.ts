@@ -2,19 +2,37 @@ import axios from 'axios';
 import { API, setConfig, setInstance } from '@facilio/api';
 
 const devMode = import.meta.env.VITE_DEV_MODE === 'true';
-const baseURL = import.meta.env.VITE_FACILIO_API_BASE_URL;
+const envBaseURL = import.meta.env.VITE_FACILIO_API_BASE_URL;
 const token = import.meta.env.VITE_FACILIO_TOKEN;
 
-/** True only when dev mode is on and both the base URL and token are configured. */
-export const isFacilioApiConfigured = devMode && !!baseURL && !!token;
+/**
+ * Connected-app mode (VITE_IS_CONNECTED_APP=true): the app is served INSIDE a Facilio org
+ * (connected app tab/iframe), so the very same V3 APIs the dev token reaches are available
+ * same-origin, authenticated by the user's session cookies — no bearer token at all. This mode
+ * OVERRIDES dev mode and every other data tier: when it's on, the real Facilio API tier is
+ * active unconditionally (rendering from the org's live data), and the vibe-db tier is demoted
+ * to what it always was underneath — a fallback.
+ */
+export const isConnectedApp = import.meta.env.VITE_IS_CONNECTED_APP === 'true';
+
+/** Where the V3 APIs live: same-origin in connected mode (unless explicitly overridden), the configured URL in dev. */
+const baseURL = isConnectedApp ? envBaseURL || `${window.location.origin}/api` : envBaseURL;
+
+/** True in connected-app mode (session-cookie auth), or in dev mode with base URL + token set. */
+export const isFacilioApiConfigured = isConnectedApp || (devMode && !!baseURL && !!token);
 
 if (isFacilioApiConfigured) {
-  const instance = axios.create({ baseURL });
-  instance.interceptors.request.use((config) => {
-    config.headers = config.headers ?? {};
-    (config.headers as Record<string, string>).Authorization = `Bearer ${token}`;
-    return config;
-  });
+  // Same-origin session cookies do the authenticating in connected mode; the bearer header is
+  // dev-only. `withCredentials` is set for the connected case so an explicitly-configured
+  // same-site absolute base URL still carries the session.
+  const instance = axios.create({ baseURL, withCredentials: isConnectedApp });
+  if (!isConnectedApp) {
+    instance.interceptors.request.use((config) => {
+      config.headers = config.headers ?? {};
+      (config.headers as Record<string, string>).Authorization = `Bearer ${token}`;
+      return config;
+    });
+  }
   setInstance(instance);
   setConfig({ _newV3: true, cacheTimeout: 0 });
 } else if (devMode) {
@@ -28,10 +46,10 @@ export { API as facilioApi };
 
 /**
  * The bare web-app origin (e.g. `https://pre-app-stage2.facilio.in`), with the `/api` suffix
- * that `VITE_FACILIO_API_BASE_URL` normally carries stripped off. Some endpoints (the
- * `maintenance/api/...` FloorplanAction routes, the web app's own `goto/summary` pages) hang
- * directly off this origin rather than under the configured API baseURL, so callers building
- * an absolute URL for those need this instead of `baseURL`.
+ * that the base URL carries stripped off. Some endpoints (the `maintenance/api/...`
+ * FloorplanAction routes, the web app's own `goto/summary` pages) hang directly off this origin
+ * rather than under the configured API baseURL, so callers building an absolute URL for those
+ * need this instead of `baseURL`. In connected mode that's simply the app's own origin.
  */
 export const apiOrigin: string | null = baseURL ? baseURL.replace(/\/api\/?$/, '') : null;
 
