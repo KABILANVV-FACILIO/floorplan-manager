@@ -18,10 +18,11 @@ export function usePanelDrag(id: 'context' | 'portfolio' | 'details', width: num
 
   const pos = actions.panelPos(id, width);
   const open = state.panels[id].open;
-  // 64px bottom clearance keeps a fully-expanded panel from covering the
-  // stage's bottom overlays — the status legend (bottom-left, ~40px + margin)
-  // and the zoom controls on the right.
-  const maxH = Math.max(180, state.stage.h - pos.y - 64);
+  // Bottom clearance keeps a fully-expanded panel (and its drop shadow) off
+  // the stage's bottom overlays. The bottom-left stack is legend (bottom 12,
+  // ~28px chips) + "Reset layout" (bottom 48, ~44px button) ≈ 92px, plus the
+  // panel's shadow bleed — 120px keeps everything below fully readable.
+  const maxH = Math.max(180, state.stage.h - pos.y - 120);
 
   function onMouseMove(e: MouseEvent) {
     const d = dragRef.current;
