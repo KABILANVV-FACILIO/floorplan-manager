@@ -43,9 +43,11 @@ export function buildInitialState(): AppState {
     mode: 'assign',
     tool: 'select',
     amenityIcon: 'asset',
-    floorId: 'hqA3',
+    // Boot into RCU-CAMPUS › Facility Office Building › Ground Floor.
+    floorId: 'rcu-s-rcu-campus-b-facility-office-building-f-ground-floor',
     planId: 'workstation',
-    expanded: { sBer: true, bA: true },
+    // Expand that site + building in the portfolio tree so the initial floor is visible.
+    expanded: { 'rcu-s-rcu-campus': true, 'rcu-s-rcu-campus-b-facility-office-building': true },
     navOpen: false,
     navView: 'spaces',
     panels: {
