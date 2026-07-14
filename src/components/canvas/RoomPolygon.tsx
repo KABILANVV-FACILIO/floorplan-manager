@@ -4,10 +4,17 @@ import { clipPathFor } from '../../lib/geometry';
 import { conflictsFor } from '../../state/selectors';
 import type { PolyGeom, Unit } from '../../lib/types';
 
-export function RoomPolygon({ unit }: { unit: Unit }) {
+export function RoomPolygon({
+  unit,
+  onEditDown,
+}: {
+  unit: Unit;
+  onEditDown?: (unit: Unit, e: ReactMouseEvent) => void;
+}) {
   const { state, actions } = useFloorplan();
   const geom = unit.geom as PolyGeom;
   const selected = state.selected === unit.id;
+  const movable = state.mode === 'edit' && state.tool === 'select';
 
   let fill: string;
   if (state.mode === 'edit') {
@@ -27,5 +34,11 @@ export function RoomPolygon({ unit }: { unit: Unit }) {
     actions.selectUnit(unit.id);
   }
 
-  return <div onClick={onClick} style={{ position: 'absolute', inset: 0, clipPath: clipPathFor(geom), background: fill, cursor: 'pointer' }} />;
+  return (
+    <div
+      onClick={onClick}
+      onMouseDown={movable && onEditDown ? (e) => onEditDown(unit, e) : undefined}
+      style={{ position: 'absolute', inset: 0, clipPath: clipPathFor(geom), background: fill, cursor: movable ? 'move' : 'pointer' }}
+    />
+  );
 }

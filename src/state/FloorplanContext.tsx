@@ -486,6 +486,12 @@ function buildActions(state: AppState, dispatch: Dispatch<Action>, canvasRectRef
       dispatch({ type: 'UPDATE_UNIT', id, patch });
       dataSource.saveUnits(state.floorId, state.units.map((u) => (u.id === id ? { ...u, ...patch } : u)));
     },
+    /** Bulk patch — one dispatch + one persist, for group moves (marquee multi-select). */
+    updateUnits: (updates: { id: string; patch: Partial<Unit> }[]) => {
+      dispatch({ type: 'UPDATE_UNITS', updates });
+      const patches = new Map(updates.map((u) => [u.id, u.patch]));
+      dataSource.saveUnits(state.floorId, state.units.map((u) => (patches.has(u.id) ? { ...u, ...patches.get(u.id)! } : u)));
+    },
     deleteUnit: (id: string) => {
       const u = unitById(state, id);
       dispatch({ type: 'DELETE_UNIT', id });

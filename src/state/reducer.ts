@@ -149,6 +149,7 @@ export type Action =
   | { type: 'ADD_UNIT'; unit: Unit }
   | { type: 'ADD_UNITS'; units: Unit[] }
   | { type: 'UPDATE_UNIT'; id: string; patch: Partial<Unit> }
+  | { type: 'UPDATE_UNITS'; updates: { id: string; patch: Partial<Unit> }[] }
   | { type: 'DELETE_UNIT'; id: string }
   | { type: 'PUSH_DRAFT_POINT'; pt: [number, number] }
   | { type: 'CLEAR_DRAFT' }
@@ -272,6 +273,11 @@ export function reducer(state: AppState, action: Action): AppState {
     }
     case 'UPDATE_UNIT': {
       const units = state.units.map((u) => (u.id === action.id ? { ...u, ...action.patch } : u));
+      return { ...state, units, unsavedChanges: countUnsavedChanges(units, state.savedUnits) };
+    }
+    case 'UPDATE_UNITS': {
+      const patches = new Map(action.updates.map((u) => [u.id, u.patch]));
+      const units = state.units.map((u) => (patches.has(u.id) ? { ...u, ...patches.get(u.id) } : u));
       return { ...state, units, unsavedChanges: countUnsavedChanges(units, state.savedUnits) };
     }
     case 'DELETE_UNIT': {

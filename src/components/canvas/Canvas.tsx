@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { DragEvent as ReactDragEvent, MouseEvent as ReactMouseEvent } from 'react';
 import { useFloorplan } from '../../state/FloorplanContext';
-import { clamp, polyAreaM2, polygonCentroid, toNorm } from '../../lib/geometry';
+import { clamp, polyAreaM2, polygonCentroid, toNorm, unitCenter } from '../../lib/geometry';
 import { IMG_H, IMG_W } from '../../lib/mockData';
 import { FloorplanBackground } from './FloorplanBackground';
 import { RoomPolygon } from './RoomPolygon';
@@ -11,10 +11,30 @@ import { Legend } from './Legend';
 import { ZoomControls } from './ZoomControls';
 import { Tooltip } from './Tooltip';
 import { floorImageKey } from '../../lib/types';
-import type { PolyGeom, Unit } from '../../lib/types';
+import type { PolyGeom, Unit, UnitGeom } from '../../lib/types';
 import styles from './Canvas.module.css';
 
 const DRAW_TOOLS = new Set(['room', 'workstation', 'locker', 'parking', 'calibrate']);
+
+/**
+ * Live edit-gesture preview, applied to rendering only — the store commits
+ * once, on mouseup (matching the existing marker-drag pattern):
+ *  - room:   whole-polygon drag of one room
+ *  - vertex: reshaping one vertex of the selected room
+ *  - group:  marquee multi-select moved as a whole
+ */
+type EditPreview =
+  | { kind: 'room'; id: string; dx: number; dy: number }
+  | { kind: 'vertex'; id: string; pts: [number, number][] }
+  | { kind: 'group'; dx: number; dy: number }
+  | null;
+
+function translateGeom(geom: UnitGeom, dx: number, dy: number): UnitGeom {
+  if (geom.kind === 'point') {
+    return { kind: 'point', x: clamp(geom.x + dx, 0, 1), y: clamp(geom.y + dy, 0, 1) };
+  }
+  return { kind: 'poly', pts: geom.pts.map(([x, y]) => [clamp(x + dx, 0, 1), clamp(y + dy, 0, 1)] as [number, number]) };
+}
 
 export function Canvas() {
   const { state, actions } = useFloorplan();
@@ -24,10 +44,28 @@ export function Canvas() {
   const suppressClickRef = useRef(false);
   const dragUnitIdRef = useRef<string | null>(null);
   const [dragPreview, setDragPreview] = useState<{ id: string; x: number; y: number } | null>(null);
+  const [editPreview, setEditPreview] = useState<EditPreview>(null);
+  const [multiSel, setMultiSel] = useState<Set<string>>(new Set());
+  const [marquee, setMarquee] = useState<{ x1: number; y1: number; x2: number; y2: number } | null>(null);
+  const gestureRef = useRef<{
+    kind: 'room' | 'group' | 'vertex' | 'marquee';
+    id?: string;
+    vertexIndex?: number;
+    sx: number;
+    sy: number;
+    origPts?: [number, number][];
+  } | null>(null);
   const userZoomedRef = useRef(state.userZoomed);
   userZoomedRef.current = state.userZoomed;
 
   const isDrawTool = state.mode === 'edit' && DRAW_TOOLS.has(state.tool);
+  const isEditSelect = state.mode === 'edit' && state.tool === 'select';
+
+  // Multi-selection is meaningless across floors/modes/tools — drop it.
+  useEffect(() => {
+    setMultiSel(new Set());
+    setEditPreview(null);
+  }, [state.floorId, state.planId, state.mode, state.tool]);
 
   useEffect(() => {
     const el = wrapRef.current;
@@ -77,6 +115,8 @@ export function Canvas() {
         if (state.draft.length || state.calib.length) {
           actions.clearDraft();
           actions.clearCalib();
+        } else if (multiSel.size > 0) {
+          setMultiSel(new Set());
         } else {
           actions.selectUnit(null);
           actions.setTool('select');
@@ -90,11 +130,30 @@ export function Canvas() {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state.draft, state.calib, state.mode, state.tool, state.selected]);
+  }, [state.draft, state.calib, state.mode, state.tool, state.selected, multiSel]);
+
+  /** client-px → normalized delta relative to the gesture start. */
+  function normDelta(e: MouseEvent) {
+    const g = gestureRef.current!;
+    return {
+      dx: (e.clientX - g.sx) / state.view.z / IMG_W,
+      dy: (e.clientY - g.sy) / state.view.z / IMG_H,
+    };
+  }
 
   function onMouseDown(e: ReactMouseEvent) {
     if (isDrawTool) return;
     if (e.button !== 0) return;
+    if (isEditSelect && e.shiftKey) {
+      // Shift+drag = marquee multi-select (plain drag stays panning).
+      const r = wrapRef.current!.getBoundingClientRect();
+      gestureRef.current = { kind: 'marquee', sx: e.clientX, sy: e.clientY };
+      setMarquee({ x1: e.clientX - r.left, y1: e.clientY - r.top, x2: e.clientX - r.left, y2: e.clientY - r.top });
+      window.addEventListener('mousemove', onMarqueeMove);
+      window.addEventListener('mouseup', onMarqueeUp);
+      e.preventDefault();
+      return;
+    }
     panRef.current = { sx: e.clientX, sy: e.clientY, otx: state.view.tx, oty: state.view.ty, moved: false };
     window.addEventListener('mousemove', onPanMove);
     window.addEventListener('mouseup', onPanUp);
@@ -117,11 +176,45 @@ export function Canvas() {
     panRef.current = null;
   }
 
+  function onMarqueeMove(e: MouseEvent) {
+    const r = wrapRef.current!.getBoundingClientRect();
+    setMarquee((m) => (m ? { ...m, x2: e.clientX - r.left, y2: e.clientY - r.top } : m));
+  }
+  function onMarqueeUp(e: MouseEvent) {
+    window.removeEventListener('mousemove', onMarqueeMove);
+    window.removeEventListener('mouseup', onMarqueeUp);
+    gestureRef.current = null;
+    suppressClickRef.current = true;
+    setTimeout(() => (suppressClickRef.current = false), 0);
+    const r = wrapRef.current!.getBoundingClientRect();
+    setMarquee((m) => {
+      if (m) {
+        const a = toNorm(Math.min(m.x1, m.x2) + r.left, Math.min(m.y1, m.y2) + r.top, r, state.view);
+        const b = toNorm(Math.max(m.x1, m.x2) + r.left, Math.max(m.y1, m.y2) + r.top, r, state.view);
+        const hits = state.units
+          .filter((u) => (u.type === 'room' && u.geom.kind === 'poly') || (u.type !== 'room' && u.plan === state.planId))
+          .filter((u) => {
+            const { cx, cy } = unitCenter(u);
+            return cx >= a.x && cx <= b.x && cy >= a.y && cy <= b.y;
+          })
+          .map((u) => u.id);
+        setMultiSel(new Set(hits));
+        if (hits.length > 0) actions.selectUnit(null);
+      }
+      return null;
+    });
+    void e;
+  }
+
   /** Reposition an already-placed desk/locker/parking-stall by dragging it — Select tool, edit mode only. */
   function startMarkerDrag(unit: Unit, e: ReactMouseEvent) {
-    if (state.mode !== 'edit' || state.tool !== 'select') return;
+    if (!isEditSelect) return;
     e.stopPropagation();
     e.preventDefault();
+    if (multiSel.size > 1 && multiSel.has(unit.id)) {
+      startGroupDrag(e);
+      return;
+    }
     actions.selectUnit(unit.id);
     dragUnitIdRef.current = unit.id;
     window.addEventListener('mousemove', onMarkerDragMove);
@@ -145,6 +238,100 @@ export function Canvas() {
     });
   }
 
+  /** Whole-room drag (edit + select): translate every vertex, commit on release. */
+  function startRoomDrag(unit: Unit, e: ReactMouseEvent) {
+    if (!isEditSelect || unit.geom.kind !== 'poly') return;
+    e.stopPropagation();
+    e.preventDefault();
+    if (multiSel.size > 1 && multiSel.has(unit.id)) {
+      startGroupDrag(e);
+      return;
+    }
+    actions.selectUnit(unit.id);
+    gestureRef.current = { kind: 'room', id: unit.id, sx: e.clientX, sy: e.clientY };
+    window.addEventListener('mousemove', onRoomDragMove);
+    window.addEventListener('mouseup', onRoomDragUp);
+  }
+  function onRoomDragMove(e: MouseEvent) {
+    const g = gestureRef.current;
+    if (!g || g.kind !== 'room') return;
+    const { dx, dy } = normDelta(e);
+    setEditPreview({ kind: 'room', id: g.id!, dx, dy });
+  }
+  function onRoomDragUp() {
+    window.removeEventListener('mousemove', onRoomDragMove);
+    window.removeEventListener('mouseup', onRoomDragUp);
+    gestureRef.current = null;
+    suppressClickRef.current = true;
+    setTimeout(() => (suppressClickRef.current = false), 0);
+    setEditPreview((p) => {
+      if (p?.kind === 'room') {
+        const unit = state.units.find((u) => u.id === p.id);
+        if (unit && (p.dx !== 0 || p.dy !== 0)) actions.updateUnit(p.id, { geom: translateGeom(unit.geom, p.dx, p.dy) });
+      }
+      return null;
+    });
+  }
+
+  /** Marquee selection moved as one — commits a single bulk update. */
+  function startGroupDrag(e: ReactMouseEvent) {
+    gestureRef.current = { kind: 'group', sx: e.clientX, sy: e.clientY };
+    window.addEventListener('mousemove', onGroupDragMove);
+    window.addEventListener('mouseup', onGroupDragUp);
+  }
+  function onGroupDragMove(e: MouseEvent) {
+    const g = gestureRef.current;
+    if (!g || g.kind !== 'group') return;
+    const { dx, dy } = normDelta(e);
+    setEditPreview({ kind: 'group', dx, dy });
+  }
+  function onGroupDragUp() {
+    window.removeEventListener('mousemove', onGroupDragMove);
+    window.removeEventListener('mouseup', onGroupDragUp);
+    gestureRef.current = null;
+    suppressClickRef.current = true;
+    setTimeout(() => (suppressClickRef.current = false), 0);
+    setEditPreview((p) => {
+      if (p?.kind === 'group' && (p.dx !== 0 || p.dy !== 0)) {
+        const updates = state.units
+          .filter((u) => multiSel.has(u.id))
+          .map((u) => ({ id: u.id, patch: { geom: translateGeom(u.geom, p.dx, p.dy) } }));
+        if (updates.length > 0) actions.updateUnits(updates);
+      }
+      return null;
+    });
+  }
+
+  /** Vertex reshape on the selected room's corner handles. */
+  function startVertexDrag(unit: Unit, index: number, e: ReactMouseEvent) {
+    if (unit.geom.kind !== 'poly') return;
+    e.stopPropagation();
+    e.preventDefault();
+    gestureRef.current = { kind: 'vertex', id: unit.id, vertexIndex: index, sx: e.clientX, sy: e.clientY, origPts: unit.geom.pts };
+    window.addEventListener('mousemove', onVertexDragMove);
+    window.addEventListener('mouseup', onVertexDragUp);
+  }
+  function onVertexDragMove(e: MouseEvent) {
+    const g = gestureRef.current;
+    if (!g || g.kind !== 'vertex' || !g.origPts) return;
+    const { dx, dy } = normDelta(e);
+    const pts = g.origPts.map(([x, y], i) =>
+      i === g.vertexIndex ? ([clamp(x + dx, 0, 1), clamp(y + dy, 0, 1)] as [number, number]) : ([x, y] as [number, number]),
+    );
+    setEditPreview({ kind: 'vertex', id: g.id!, pts });
+  }
+  function onVertexDragUp() {
+    window.removeEventListener('mousemove', onVertexDragMove);
+    window.removeEventListener('mouseup', onVertexDragUp);
+    gestureRef.current = null;
+    suppressClickRef.current = true;
+    setTimeout(() => (suppressClickRef.current = false), 0);
+    setEditPreview((p) => {
+      if (p?.kind === 'vertex') actions.updateUnit(p.id, { geom: { kind: 'poly', pts: p.pts } });
+      return null;
+    });
+  }
+
   function onClick(e: ReactMouseEvent) {
     if (suppressClickRef.current) return;
     const el = wrapRef.current;
@@ -154,6 +341,7 @@ export function Canvas() {
 
     if (!isDrawTool) {
       actions.selectUnit(null);
+      setMultiSel(new Set());
       return;
     }
     if (n.x < 0 || n.x > 1 || n.y < 0 || n.y > 1) return;
@@ -200,16 +388,33 @@ export function Canvas() {
   const invZ = (1 / state.view.z).toFixed(4);
   const planeTransition = state.viewAnim ? 'transform 340ms cubic-bezier(0.2,0,0,1)' : 'none';
 
+  /** Rendering geometry with any live edit preview applied. */
+  function previewedGeom(u: Unit): UnitGeom {
+    if (editPreview?.kind === 'group' && multiSel.has(u.id)) return translateGeom(u.geom, editPreview.dx, editPreview.dy);
+    if (editPreview?.kind === 'room' && editPreview.id === u.id) return translateGeom(u.geom, editPreview.dx, editPreview.dy);
+    if (editPreview?.kind === 'vertex' && editPreview.id === u.id) return { kind: 'poly', pts: editPreview.pts };
+    return u.geom;
+  }
+
   // poly-guard matters: connector-tier spaces arrive without plan geometry
   // (listed in the sidebar, not drawn) — RoomPolygon would crash on them.
-  const rooms = state.units.filter((u) => u.type === 'room' && u.geom.kind === 'poly');
-  const markers = state.units.filter((u) => u.type !== 'room' && u.plan === state.planId);
+  const rooms = state.units
+    .filter((u) => u.type === 'room' && u.geom.kind === 'poly')
+    .map((u) => ({ ...u, geom: previewedGeom(u) }));
+  const markers = state.units
+    .filter((u) => u.type !== 'room' && u.plan === state.planId)
+    .map((u) => ({ ...u, geom: previewedGeom(u) }));
+
+  const selectedRoom = isEditSelect && multiSel.size === 0 ? rooms.find((r) => r.id === state.selected) : undefined;
 
   let canvasHint = '';
   if (state.mode === 'edit') {
     if (state.tool === 'room') canvasHint = state.draft.length === 0 ? 'Click to start a room outline' : 'Click to add points · click the first point (or press Enter) to close';
     else if (state.tool === 'calibrate') canvasHint = state.calib.length === 0 ? 'Click two points a known distance apart' : state.calib.length === 1 ? 'Click the second point' : 'Enter the real-world distance in the panel';
     else if (state.tool !== 'select') canvasHint = 'Click on the plan to place it';
+    else if (multiSel.size > 1) canvasHint = `${multiSel.size} selected — drag any of them to move the group · Esc to clear`;
+    else if (selectedRoom) canvasHint = 'Drag the room to move it · drag a corner to reshape · Shift+drag for multi-select';
+    else canvasHint = 'Drag units to move them · Shift+drag to multi-select';
   }
 
   return (
@@ -235,11 +440,11 @@ export function Canvas() {
       >
         <FloorplanBackground imageUrl={state.floorImages[floorImageKey(state.floorId, state.planId)]} />
         {rooms.map((r) => (
-          <RoomPolygon key={r.id} unit={r} />
+          <RoomPolygon key={r.id} unit={r} onEditDown={startRoomDrag} />
         ))}
         <DraftOverlay draft={state.draft} calib={state.calib} />
         {rooms.map((r) => (
-          <RoomLabel key={r.id} unitId={r.id} />
+          <RoomLabel key={r.id} unit={r} />
         ))}
         {markers.map((m) => (
           <Marker
@@ -249,7 +454,83 @@ export function Canvas() {
             onDragStart={startMarkerDrag}
           />
         ))}
+
+        {/* multi-select outlines */}
+        {multiSel.size > 0 && (
+          <svg width={IMG_W} height={IMG_H} viewBox={`0 0 ${IMG_W} ${IMG_H}`} style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
+            {rooms
+              .filter((r) => multiSel.has(r.id))
+              .map((r) => (
+                <polygon
+                  key={r.id}
+                  points={(r.geom as PolyGeom).pts.map(([x, y]) => `${x * IMG_W},${y * IMG_H}`).join(' ')}
+                  fill="none"
+                  stroke="var(--blue-500)"
+                  strokeWidth={2 * Number(invZ)}
+                  strokeDasharray={`${6 * Number(invZ)} ${4 * Number(invZ)}`}
+                />
+              ))}
+            {markers
+              .filter((m) => multiSel.has(m.id) && m.geom.kind === 'point')
+              .map((m) => (
+                <circle
+                  key={m.id}
+                  cx={(m.geom as { x: number }).x * IMG_W}
+                  cy={(m.geom as { y: number }).y * IMG_H}
+                  r={16 * Number(invZ)}
+                  fill="none"
+                  stroke="var(--blue-500)"
+                  strokeWidth={2 * Number(invZ)}
+                  strokeDasharray={`${5 * Number(invZ)} ${4 * Number(invZ)}`}
+                />
+              ))}
+          </svg>
+        )}
+
+        {/* corner handles for reshaping the selected room */}
+        {selectedRoom && selectedRoom.geom.kind === 'poly' && (
+          <>
+            {(selectedRoom.geom as PolyGeom).pts.map(([x, y], i) => (
+              <div
+                key={i}
+                onMouseDown={(e) => startVertexDrag(state.units.find((u) => u.id === selectedRoom.id)!, i, e)}
+                title="Drag to reshape"
+                style={{
+                  position: 'absolute',
+                  left: `${x * 100}%`,
+                  top: `${y * 100}%`,
+                  width: 12,
+                  height: 12,
+                  borderRadius: '50%',
+                  background: '#fff',
+                  border: '2.5px solid var(--blue-500)',
+                  transform: 'translate(-50%,-50%) scale(var(--inv))',
+                  cursor: 'grab',
+                  boxShadow: '0 1px 3px rgba(16,24,40,0.3)',
+                  zIndex: 5,
+                }}
+              />
+            ))}
+          </>
+        )}
       </div>
+
+      {/* marquee rectangle, drawn in stage space */}
+      {marquee && (
+        <div
+          style={{
+            position: 'absolute',
+            left: Math.min(marquee.x1, marquee.x2),
+            top: Math.min(marquee.y1, marquee.y2),
+            width: Math.abs(marquee.x2 - marquee.x1),
+            height: Math.abs(marquee.y2 - marquee.y1),
+            border: '1.5px dashed var(--blue-500)',
+            background: 'rgba(0,89,214,0.06)',
+            pointerEvents: 'none',
+            zIndex: 6,
+          }}
+        />
+      )}
 
       <Tooltip />
 
@@ -261,10 +542,9 @@ export function Canvas() {
   );
 }
 
-function RoomLabel({ unitId }: { unitId: string }) {
+function RoomLabel({ unit }: { unit: Unit }) {
   const { state } = useFloorplan();
-  const unit = state.units.find((u) => u.id === unitId);
-  if (!unit || unit.geom.kind !== 'poly') return null;
+  if (unit.geom.kind !== 'poly') return null;
   const geom = unit.geom as PolyGeom;
   const { x, y } = polygonCentroid(geom.pts);
 
