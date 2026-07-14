@@ -34,6 +34,11 @@ export async function renderCadToDataUrl(file: File): Promise<string> {
     });
     if (!manager) throw new Error('CAD viewer failed to initialize');
 
+    // White paper-style background instead of the AutoCAD-default black — set
+    // BEFORE opening so entity conversion resolves ACI-7 ("white") entities to
+    // black against the light background (the library handles that inversion).
+    manager.curView.backgroundColor = 0xffffff;
+
     const buffer = await file.arrayBuffer();
     // Without an explicit view mode, the default open mode restores the drawing's saved
     // AutoCAD viewport (VPORT `*ACTIVE`) rather than framing the actual geometry — for a

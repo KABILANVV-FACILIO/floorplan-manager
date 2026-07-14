@@ -85,6 +85,7 @@ export function buildInitialState(): AppState {
 
     uploadOpen: false,
     autoMapGroups: null,
+    cadAnalyses: {},
     myDesk: null,
     floorImages: {},
     floorPlanTypes: {},
@@ -157,6 +158,7 @@ export type Action =
   | { type: 'SET_MOB_ASSIGN_EDIT'; value: boolean }
   | { type: 'SET_UPLOAD_OPEN'; open: boolean }
   | { type: 'SET_AUTOMAP_GROUPS'; groups: AppState['autoMapGroups'] }
+  | { type: 'SET_CAD_ANALYSIS'; key: string; groups: AppState['autoMapGroups'] }
   | { type: 'SET_FLOOR_IMAGE'; floorId: string; planId: PlanId; dataUrl: string }
   | { type: 'SET_FLOOR_PLAN_TYPES'; floorId: string; types: AppState['floorPlanTypes'][string] }
   | { type: 'SET_FLOOR_IMAGE_LOADING'; value: boolean }
@@ -351,6 +353,12 @@ export function reducer(state: AppState, action: Action): AppState {
       return { ...state, uploadOpen: action.open };
     case 'SET_AUTOMAP_GROUPS':
       return { ...state, autoMapGroups: action.groups };
+    case 'SET_CAD_ANALYSIS': {
+      const cadAnalyses = { ...state.cadAnalyses };
+      if (action.groups && action.groups.length > 0) cadAnalyses[action.key] = action.groups;
+      else delete cadAnalyses[action.key];
+      return { ...state, cadAnalyses };
+    }
     case 'SET_FLOOR_IMAGE':
       return { ...state, floorImages: { ...state.floorImages, [floorImageKey(action.floorId, action.planId)]: action.dataUrl } };
     case 'SET_FLOOR_PLAN_TYPES':

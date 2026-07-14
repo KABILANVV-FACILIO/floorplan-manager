@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { useFloorplan } from '../../state/FloorplanContext';
 import { unitById } from '../../state/selectors';
 import { polyAreaM2 } from '../../lib/geometry';
-import { TYPE_META } from '../../lib/types';
+import { floorImageKey, TYPE_META } from '../../lib/types';
 import type { EditTool } from '../../lib/types';
 import { Button } from '../primitives/Button';
 import card from './Card.module.css';
@@ -75,6 +75,23 @@ export function EditPanel() {
           <Button variant="secondary" fullWidth onClick={() => actions.setUploadOpen(true)}>
             Upload / replace floorplan image
           </Button>
+          {(() => {
+            // Only offered when this floor/plan's image came from a CAD file
+            // analyzed this session — image-only plans have no metadata to map.
+            const cadGroups = state.cadAnalyses[floorImageKey(state.floorId, state.planId)];
+            if (!cadGroups?.length) return null;
+            return (
+              <div style={{ marginTop: 8 }}>
+                <Button variant="secondary" fullWidth onClick={() => actions.openAutoMap(cadGroups)}>
+                  Auto-map CAD units
+                </Button>
+                <p className={card.helper} style={{ marginTop: 6 }}>
+                  Re-runs the layer/block mapping from the uploaded CAD file. Mapping again adds new
+                  units — discard or delete the earlier batch first if you don't want duplicates.
+                </p>
+              </div>
+            );
+          })()}
         </div>
       </div>
 

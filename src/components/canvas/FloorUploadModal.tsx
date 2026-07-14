@@ -83,6 +83,7 @@ export function FloorUploadModal() {
       );
       actions.setUploadOpen(false);
       setStatus('idle');
+      if (isCadFile(file.name)) actions.storeCadAnalysis(state.floorId, state.planId, cadGroups);
       if (cadGroups.length > 0) {
         actions.openAutoMap(cadGroups);
       } else if (isCadFile(file.name)) {

@@ -287,6 +287,9 @@ function buildActions(state: AppState, dispatch: Dispatch<Action>, canvasRectRef
 
     openAutoMap: (groups: CadGroup[]) => dispatch({ type: 'SET_AUTOMAP_GROUPS', groups }),
     closeAutoMap: () => dispatch({ type: 'SET_AUTOMAP_GROUPS', groups: null }),
+    /** Keep a CAD file's analysis for the session so Edit → "Auto-map CAD units" can re-open it. */
+    storeCadAnalysis: (floorId: string, planId: PlanId, groups: CadGroup[]) =>
+      dispatch({ type: 'SET_CAD_ANALYSIS', key: floorImageKey(floorId, planId), groups }),
     /**
      * Materialize the auto-map modal's choices into units. Rooms are created
      * first so point units (desks/lockers/parking) can be containment-tagged

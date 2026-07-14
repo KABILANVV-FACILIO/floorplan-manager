@@ -84,6 +84,9 @@ export async function analyzeCadFile(file: File): Promise<CadAnalysis> {
     });
     if (!manager) throw new Error('CAD viewer failed to initialize');
 
+    // Same white-background treatment as renderCadToDataUrl (ACI-7 inverts).
+    manager.curView.backgroundColor = 0xffffff;
+
     const buffer = await file.arrayBuffer();
     const ok = await manager.openDocument(file.name, buffer, { openViewMode: AcApOpenViewMode.Extents });
     if (!ok) throw new Error('Could not parse this CAD file');

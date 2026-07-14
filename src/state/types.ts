@@ -95,6 +95,8 @@ export interface AppState {
   uploadOpen: boolean;
   /** Mappable structure of the last-uploaded CAD file — non-null while the auto-map modal is open. */
   autoMapGroups: CadGroup[] | null;
+  /** Per floor/plan (floorImageKey) CAD analysis kept for the session, so the Edit panel can re-open auto-map without re-uploading. */
+  cadAnalyses: Record<string, CadGroup[]>;
   /** The logged-in user's real assigned/booked desk (from servicePortalHome) — powers "My desk" against the real backend, where `assignments` (mock-derived) can't. */
   myDesk: { recordId: number; name: string; floorId: string | null; booked: boolean } | null;
   floorImages: Record<string, string>;
