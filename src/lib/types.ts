@@ -37,7 +37,7 @@ export const ALL_PLAN_TYPES: { id: PlanId; name: string }[] = [
   { id: 'parking', name: PLAN_TYPE_NAME.parking },
 ];
 export type AppMode = 'assign' | 'book' | 'edit';
-export type EditTool = 'select' | 'room' | 'workstation' | 'locker' | 'parking' | 'amenity' | 'calibrate';
+export type EditTool = 'select' | 'room' | 'workstation' | 'locker' | 'parking' | 'amenity' | 'asset' | 'calibrate';
 export type Role = 'admin' | 'manager' | 'employee';
 
 /** Each plan type on a floor can have its own background image — key floorImages by both. */
@@ -86,6 +86,8 @@ export interface Unit {
   deskType?: DeskType;
   /** Amenity markers only — which glyph the marker renders. */
   icon?: AmenityIcon;
+  /** Asset-associated markers — id of the linked asset (see lib/assets). */
+  assetId?: string;
 }
 
 export interface Employee {

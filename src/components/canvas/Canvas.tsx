@@ -374,18 +374,26 @@ export function Canvas() {
   // gets placed at the drop point, an already-placed one is repositioned. Edit mode only —
   // the rows are only draggable there, but guard anyway against synthetic drops.
   function onDragOver(e: ReactDragEvent) {
-    if (state.mode === 'edit' && e.dataTransfer.types.includes('application/x-floorplan-unit')) e.preventDefault();
+    if (
+      state.mode === 'edit' &&
+      (e.dataTransfer.types.includes('application/x-floorplan-unit') ||
+        e.dataTransfer.types.includes('application/x-floorplan-asset'))
+    )
+      e.preventDefault();
   }
   function onDrop(e: ReactDragEvent) {
     if (state.mode !== 'edit') return;
-    const unitId = e.dataTransfer.getData('application/x-floorplan-unit');
     const el = wrapRef.current;
-    if (!unitId || !el) return;
+    if (!el) return;
+    const unitId = e.dataTransfer.getData('application/x-floorplan-unit');
+    const assetId = e.dataTransfer.getData('application/x-floorplan-asset');
+    if (!unitId && !assetId) return;
     e.preventDefault();
     const r = el.getBoundingClientRect();
     const n = toNorm(e.clientX, e.clientY, r, state.view);
     if (n.x < 0 || n.x > 1 || n.y < 0 || n.y > 1) return;
-    actions.placeUnitAt(unitId, n.x, n.y);
+    if (assetId) actions.placeAssetAt(assetId, n.x, n.y);
+    else actions.placeUnitAt(unitId, n.x, n.y);
   }
 
   const invZ = (1 / state.view.z).toFixed(4);

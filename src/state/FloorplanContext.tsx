@@ -5,6 +5,7 @@ import { PORTFOLIO as MOCK_PORTFOLIO, EMPLOYEES as MOCK_EMPLOYEES, seedBookings,
 import { AMENITY_META, floorImageKey, TYPE_META } from '../lib/types';
 import type { AmenityIcon, Booking, PlanId, Role, Site, Unit, UnitType } from '../lib/types';
 import type { CadGroup } from '../lib/cadAnalyze';
+import { DEMO_ASSETS } from '../lib/assets';
 import { isFacilioApiConfigured } from '../lib/facilioApi';
 import { assignUnitReal, createRealBooking, fetchFloorplanImage, fetchMyDesk, findUnitIdForDeskRecord, getFloorPlanSummary, saveFloorplanMarkers, vacateUnitReal } from '../lib/facilioApiDataSource';
 import { listFloorplanFloorIds, loadFloorplanFile, persistFloorplanFile } from '../lib/floorplanFileStore';
@@ -322,6 +323,35 @@ function buildActions(state: AppState, dispatch: Dispatch<Action>, canvasRectRef
       dispatch({ type: 'SET_PENDING_PLACEMENT', placement: { type, x, y } });
     },
     cancelPlacement: () => dispatch({ type: 'SET_PENDING_PLACEMENT', placement: null }),
+    /** Place a marker linked to a catalog asset (drag from the Edit asset list). */
+    placeAssetAt: (assetId: string, x: number, y: number) => {
+      const asset = DEMO_ASSETS.find((a) => a.id === assetId);
+      if (!asset) return;
+      // Don't place the same asset twice — move the existing marker instead.
+      const existing = state.units.find((u) => u.type === 'amenity' && u.assetId === assetId);
+      if (existing) {
+        const geom = { kind: 'point' as const, x, y };
+        dispatch({ type: 'UPDATE_UNIT', id: existing.id, patch: { geom } });
+        dataSource.saveUnits(state.floorId, state.units.map((u) => (u.id === existing.id ? { ...u, geom } : u)));
+        showToast(`${asset.name} moved`);
+        return;
+      }
+      const unit: Unit = {
+        id: 'as' + Date.now(),
+        type: 'amenity',
+        icon: 'asset',
+        assetId,
+        label: asset.name,
+        secondary: `${asset.category} · ${asset.detail}`,
+        room: roomLabelAt(state, x, y),
+        geom: { kind: 'point', x, y },
+        floor: state.floorId,
+        plan: state.planId,
+      };
+      dispatch({ type: 'ADD_UNIT', unit });
+      dataSource.saveUnits(state.floorId, [...state.units, unit]);
+      showToast(`${asset.name} placed`);
+    },
     /** Amenity markers place directly (no which-record dialog) with the tool's chosen icon. */
     placeAmenity: (icon: AmenityIcon, x: number, y: number) => {
       const count = state.units.filter((u) => u.type === 'amenity' && u.icon === icon).length;

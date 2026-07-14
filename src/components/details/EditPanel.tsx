@@ -1,9 +1,11 @@
+import { useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useFloorplan } from '../../state/FloorplanContext';
 import { unitById } from '../../state/selectors';
 import { polyAreaM2 } from '../../lib/geometry';
 import { AMENITY_ICONS, AMENITY_META, DESK_TYPES, floorImageKey, TYPE_META } from '../../lib/types';
 import type { AmenityIcon, DeskType, EditTool } from '../../lib/types';
+import { DEMO_ASSETS } from '../../lib/assets';
 import { Button } from '../primitives/Button';
 import card from './Card.module.css';
 import styles from './EditPanel.module.css';
@@ -42,6 +44,11 @@ const TOOLS: { id: EditTool; label: string; icon: ReactNode }[] = [
     icon: <><path d="M20 10c0 6-8 12-8 12S4 16 4 10a8 8 0 0 1 16 0z" /><circle cx="12" cy="10" r="3" /></>,
   },
   {
+    id: 'asset',
+    label: 'Asset',
+    icon: <><path d="M21 8l-9-5-9 5 9 5 9-5zM3 8v8l9 5 9-5V8" /><path d="M12 13v8" /></>,
+  },
+  {
     id: 'calibrate',
     label: 'Calibrate',
     icon: <><path d="M4 12h16" /><path d="M4 12v4M8 12v2M12 12v4M16 12v2M20 12v4" /></>,
@@ -61,6 +68,12 @@ export function EditPanel() {
   const sel = unitById(state, state.selected);
   const calibActive = state.tool === 'calibrate' && state.calib.length > 0;
   const calibReady = state.calib.length === 2;
+  const [assetQuery, setAssetQuery] = useState('');
+  const placedAssetIds = useMemo(() => new Set(state.units.filter((u) => u.assetId).map((u) => u.assetId)), [state.units]);
+  const filteredAssets = useMemo(() => {
+    const q = assetQuery.trim().toLowerCase();
+    return DEMO_ASSETS.filter((a) => !q || a.name.toLowerCase().includes(q) || a.category.toLowerCase().includes(q) || a.detail.toLowerCase().includes(q));
+  }, [assetQuery]);
 
   return (
     <div className={styles.stack}>
@@ -104,6 +117,57 @@ export function EditPanel() {
               ))}
             </div>
             <p className={card.helper}>Click on the plan to drop a {AMENITY_META[state.amenityIcon].name.toLowerCase()} marker.</p>
+          </div>
+        </div>
+      )}
+
+      {state.tool === 'asset' && (
+        <div className={card.card}>
+          <div className={card.cardHead}>
+            <h3 className={card.cardTitle}>Assets</h3>
+          </div>
+          <div className={card.cardBody}>
+            <input
+              className={card.input}
+              placeholder="Search assets"
+              value={assetQuery}
+              onChange={(e) => setAssetQuery(e.target.value)}
+            />
+            <p className={card.helper} style={{ margin: '8px 0 4px' }}>Drag an asset onto the plan to place it.</p>
+            <div className={styles.assetList}>
+              {filteredAssets.map((a) => {
+                const placed = placedAssetIds.has(a.id);
+                return (
+                  <div
+                    key={a.id}
+                    className={styles.assetRow}
+                    draggable
+                    onDragStart={(e) => {
+                      e.dataTransfer.setData('application/x-floorplan-asset', a.id);
+                      e.dataTransfer.effectAllowed = 'copy';
+                    }}
+                    title="Drag onto the floorplan to place"
+                  >
+                    <span className={styles.assetIcon}>
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M21 8l-9-5-9 5 9 5 9-5zM3 8v8l9 5 9-5V8" />
+                        <path d="M12 13v8" />
+                      </svg>
+                    </span>
+                    <span className={styles.assetText}>
+                      <span className={styles.assetName}>{a.name}</span>
+                      <span className={styles.assetDetail}>{a.category} · {a.detail}</span>
+                    </span>
+                    {placed && (
+                      <span className={styles.assetPlaced} title="Already on this plan (drag to move)">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5" /></svg>
+                      </span>
+                    )}
+                  </div>
+                );
+              })}
+              {filteredAssets.length === 0 && <p className={card.helper}>No assets match.</p>}
+            </div>
           </div>
         </div>
       )}

@@ -45,3 +45,62 @@
   max-height: 96px;
   overflow-y: auto;
 }
+
+/* ---- asset drag list ---- */
+.assetList {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 260px;
+  overflow-y: auto;
+  margin-top: 4px;
+}
+.assetRow {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 6px;
+  border-radius: var(--radius-md);
+  cursor: grab;
+}
+.assetRow:hover {
+  background: var(--ink-050);
+}
+.assetRow:active {
+  cursor: grabbing;
+}
+.assetIcon {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  background: rgba(109, 91, 208, 0.12);
+  color: #6d5bd0;
+}
+.assetText {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.assetName {
+  font: 600 12.5px/1.2 var(--font-sans);
+  color: var(--ink-900);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.assetDetail {
+  font: 400 10.5px/1.2 var(--font-sans);
+  color: var(--ink-500);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.assetPlaced {
+  flex-shrink: 0;
+  color: var(--success-600);
+}
