@@ -108,8 +108,11 @@
   border-radius: 3px;
 }
 .rowText {
-  flex: 1;
-  min-width: 0;
+  /* flex-basis auto + a floor of 42% keeps the unit label readable — with
+     `flex: 1` (basis 0) a long "Assigned · <name>" pill claimed its full
+     intrinsic width first and squeezed the label down to nothing. */
+  flex: 1 1 auto;
+  min-width: 42%;
 }
 .rowLabel {
   font: 600 12.5px/1.2 var(--font-sans);
