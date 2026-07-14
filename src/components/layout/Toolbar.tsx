@@ -5,6 +5,14 @@ import styles from './Toolbar.module.css';
 export function Toolbar({ leftPad, rightPad }: { leftPad: number; rightPad: number }) {
   const { state, actions } = useFloorplan();
   const myUnit = myAssignedUnit(state);
+  // Mock tier derives "my desk" from local assignments; the real backend provides it via
+  // servicePortalHome (state.myDesk). Either one lights the button up.
+  const hasMyDesk = !!myUnit || !!state.myDesk;
+
+  function onMyDesk() {
+    if (myUnit) actions.focusUnit(myUnit.id, state.stage.w, state.stage.h, { select: false });
+    else actions.locateMyDesk(state.stage.w, state.stage.h);
+  }
 
   return (
     <div className={styles.wrap} style={{ paddingLeft: leftPad, paddingRight: rightPad }}>
@@ -30,8 +38,8 @@ export function Toolbar({ leftPad, rightPad }: { leftPad: number; rightPad: numb
           Edit
         </button>
 
-        {myUnit && (
-          <button className={styles.myDesk} title="Locate my desk" onClick={() => actions.focusUnit(myUnit.id, state.stage.w, state.stage.h)}>
+        {hasMyDesk && (
+          <button className={styles.myDesk} title="Locate my desk" onClick={onMyDesk}>
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M12 2v3M12 19v3M2 12h3M19 12h3" />
               <circle cx="12" cy="12" r="4" />
@@ -48,16 +56,6 @@ export function Toolbar({ leftPad, rightPad }: { leftPad: number; rightPad: numb
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
             <rect x="3" y="3" width="18" height="18" rx="2" />
             <path d="M15 3v18" />
-          </svg>
-        </button>
-        <button
-          className={[styles.iconToggle, state.mobileOpen ? styles.iconToggleActive : ''].join(' ')}
-          title="Mobile preview"
-          onClick={actions.toggleMobile}
-        >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-            <rect x="5" y="2" width="14" height="20" rx="2" />
-            <path d="M11 18h2" />
           </svg>
         </button>
       </div>

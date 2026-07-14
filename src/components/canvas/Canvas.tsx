@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { MouseEvent as ReactMouseEvent } from 'react';
 import { useFloorplan } from '../../state/FloorplanContext';
-import { polyAreaM2, polygonCentroid, toNorm } from '../../lib/geometry';
+import { clamp, polyAreaM2, polygonCentroid, toNorm } from '../../lib/geometry';
 import { IMG_H, IMG_W } from '../../lib/mockData';
 import { FloorplanBackground } from './FloorplanBackground';
 import { RoomPolygon } from './RoomPolygon';
@@ -10,7 +10,8 @@ import { DraftOverlay } from './DraftOverlay';
 import { Legend } from './Legend';
 import { ZoomControls } from './ZoomControls';
 import { Tooltip } from './Tooltip';
-import type { PolyGeom } from '../../lib/types';
+import { floorImageKey } from '../../lib/types';
+import type { PolyGeom, Unit } from '../../lib/types';
 import styles from './Canvas.module.css';
 
 const DRAW_TOOLS = new Set(['room', 'workstation', 'locker', 'parking', 'calibrate']);
@@ -21,6 +22,8 @@ export function Canvas() {
   const [rect, setRect] = useState({ w: 1200, h: 700 });
   const panRef = useRef<{ sx: number; sy: number; otx: number; oty: number; moved: boolean } | null>(null);
   const suppressClickRef = useRef(false);
+  const dragUnitIdRef = useRef<string | null>(null);
+  const [dragPreview, setDragPreview] = useState<{ id: string; x: number; y: number } | null>(null);
   const userZoomedRef = useRef(state.userZoomed);
   userZoomedRef.current = state.userZoomed;
 
@@ -103,6 +106,34 @@ export function Canvas() {
     panRef.current = null;
   }
 
+  /** Reposition an already-placed desk/locker/parking-stall by dragging it — Select tool, edit mode only. */
+  function startMarkerDrag(unit: Unit, e: ReactMouseEvent) {
+    if (state.mode !== 'edit' || state.tool !== 'select') return;
+    e.stopPropagation();
+    e.preventDefault();
+    actions.selectUnit(unit.id);
+    dragUnitIdRef.current = unit.id;
+    window.addEventListener('mousemove', onMarkerDragMove);
+    window.addEventListener('mouseup', onMarkerDragUp);
+  }
+  function onMarkerDragMove(e: MouseEvent) {
+    const id = dragUnitIdRef.current;
+    const el = wrapRef.current;
+    if (!id || !el) return;
+    const r = el.getBoundingClientRect();
+    const n = toNorm(e.clientX, e.clientY, r, state.view);
+    setDragPreview({ id, x: clamp(n.x, 0, 1), y: clamp(n.y, 0, 1) });
+  }
+  function onMarkerDragUp() {
+    window.removeEventListener('mousemove', onMarkerDragMove);
+    window.removeEventListener('mouseup', onMarkerDragUp);
+    dragUnitIdRef.current = null;
+    setDragPreview((preview) => {
+      if (preview) actions.updateUnit(preview.id, { geom: { kind: 'point', x: preview.x, y: preview.y } });
+      return null;
+    });
+  }
+
   function onClick(e: ReactMouseEvent) {
     if (suppressClickRef.current) return;
     const el = wrapRef.current;
@@ -169,7 +200,7 @@ export function Canvas() {
           ['--inv' as any]: invZ,
         }}
       >
-        <FloorplanBackground imageUrl={state.floorImages[state.floorId]} />
+        <FloorplanBackground imageUrl={state.floorImages[floorImageKey(state.floorId, state.planId)]} />
         {rooms.map((r) => (
           <RoomPolygon key={r.id} unit={r} />
         ))}
@@ -178,7 +209,12 @@ export function Canvas() {
           <RoomLabel key={r.id} unitId={r.id} />
         ))}
         {markers.map((m) => (
-          <Marker key={m.id} unit={m} invZ={Number(invZ)} />
+          <Marker
+            key={m.id}
+            unit={dragPreview?.id === m.id ? { ...m, geom: { kind: 'point', x: dragPreview.x, y: dragPreview.y } } : m}
+            invZ={Number(invZ)}
+            onDragStart={startMarkerDrag}
+          />
         ))}
       </div>
 

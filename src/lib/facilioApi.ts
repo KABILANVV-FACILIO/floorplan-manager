@@ -25,3 +25,22 @@ if (isFacilioApiConfigured) {
 }
 
 export { API as facilioApi };
+
+/**
+ * The bare web-app origin (e.g. `https://pre-app-stage2.facilio.in`), with the `/api` suffix
+ * that `VITE_FACILIO_API_BASE_URL` normally carries stripped off. Some endpoints (the
+ * `maintenance/api/...` FloorplanAction routes, the web app's own `goto/summary` pages) hang
+ * directly off this origin rather than under the configured API baseURL, so callers building
+ * an absolute URL for those need this instead of `baseURL`.
+ */
+export const apiOrigin: string | null = baseURL ? baseURL.replace(/\/api\/?$/, '') : null;
+
+/**
+ * Builds a link to a record's summary page in the real Facilio web app (e.g.
+ * `https://pre-app-stage2.facilio.in/maintenance/goto/summary/employee/123`), matching the
+ * `RECORD URL` convention documented on the CMMS actions.
+ */
+export function facilioRecordUrl(moduleName: string, id: string | number): string | null {
+  if (!apiOrigin) return null;
+  return `${apiOrigin}/maintenance/goto/summary/${moduleName}/${id}`;
+}

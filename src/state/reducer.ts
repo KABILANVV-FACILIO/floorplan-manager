@@ -1,5 +1,5 @@
-import { DEFAULT_PERMS } from '../lib/types';
-import type { Booking, Site, Unit } from '../lib/types';
+import { DEFAULT_PERMS, floorImageKey } from '../lib/types';
+import type { Booking, PlanId, Site, Unit } from '../lib/types';
 import { clamp, fitView } from '../lib/geometry';
 import { seedBookings } from '../lib/mockData';
 import type { AppState } from './types';
@@ -32,6 +32,9 @@ export function buildInitialState(): AppState {
     spaceSearch: '',
 
     units: [],
+    savedUnits: [],
+    unsavedChanges: 0,
+    pendingModeSwitch: null,
     assignments: {},
     bookings: [],
     employees: [],
@@ -41,6 +44,7 @@ export function buildInitialState(): AppState {
     dataSourceName: null,
 
     selected: null,
+    highlightUnitId: null,
     draft: [],
     calib: [],
     calibLen: '',
@@ -55,6 +59,9 @@ export function buildInitialState(): AppState {
     bookPurpose: '',
     bookNotes: '',
     bookModalOpen: false,
+    bookForm: null,
+    bookingModule: 'space',
+    bookingsNonce: 0,
     webReassign: null,
     schedView: 'list',
 
@@ -68,7 +75,6 @@ export function buildInitialState(): AppState {
 
     toast: null,
 
-    mobileOpen: false,
     mobileTab: 'book',
     mobSel: null,
     mobPickSite: null,
@@ -78,7 +84,10 @@ export function buildInitialState(): AppState {
     mobAssignEdit: false,
 
     uploadOpen: false,
+    myDesk: null,
     floorImages: {},
+    floorPlanTypes: {},
+    floorImageLoading: false,
   };
 }
 
@@ -99,6 +108,7 @@ export type Action =
   | { type: 'SET_SPACE_SEARCH'; value: string }
   | { type: 'PORTFOLIO_LOADED'; portfolio: Site[]; employees: AppState['employees'] }
   | { type: 'SELECT_UNIT'; id: string | null }
+  | { type: 'HIGHLIGHT_UNIT'; id: string | null }
   | { type: 'ADD_UNIT'; unit: Unit }
   | { type: 'UPDATE_UNIT'; id: string; patch: Partial<Unit> }
   | { type: 'DELETE_UNIT'; id: string }
@@ -119,6 +129,9 @@ export type Action =
   | { type: 'SET_TIME_RANGE'; start: number; end: number }
   | { type: 'SET_BOOK_MODAL'; open: boolean }
   | { type: 'SET_BOOK_FIELD'; field: 'bookBy' | 'bookPurpose' | 'bookNotes'; value: string }
+  | { type: 'SET_BOOK_FORM'; form: AppState['bookForm'] }
+  | { type: 'UPDATE_BOOK_FORM'; patch: Partial<NonNullable<AppState['bookForm']>> }
+  | { type: 'SET_BOOKING_MODULE'; module: AppState['bookingModule'] }
   | { type: 'ADD_BOOKING'; booking: Booking }
   | { type: 'CANCEL_BOOKING'; id: string }
   | { type: 'SET_SCHED_VIEW'; view: AppState['schedView'] }
@@ -131,9 +144,9 @@ export type Action =
   | { type: 'SET_SLOT_GRANULARITY'; minutes: number }
   | { type: 'SHOW_TOAST'; message: string | null }
   | { type: 'TOGGLE_PANEL_OPEN'; id: 'context' | 'portfolio' | 'details' }
+  | { type: 'SET_PANEL_OPEN'; id: 'context' | 'portfolio' | 'details'; open: boolean }
   | { type: 'SET_PANEL_POS'; id: 'context' | 'portfolio' | 'details'; x: number; y: number }
   | { type: 'RESET_LAYOUT' }
-  | { type: 'TOGGLE_MOBILE' }
   | { type: 'SET_MOBILE_TAB'; tab: AppState['mobileTab'] }
   | { type: 'SET_MOB_SEL'; id: string | null }
   | { type: 'SET_MOB_FLOOR_OPEN'; open: boolean }
@@ -141,7 +154,13 @@ export type Action =
   | { type: 'SET_MOB_TIME_PICK'; which: AppState['mobTimePick'] }
   | { type: 'SET_MOB_ASSIGN_EDIT'; value: boolean }
   | { type: 'SET_UPLOAD_OPEN'; open: boolean }
-  | { type: 'SET_FLOOR_IMAGE'; floorId: string; dataUrl: string }
+  | { type: 'SET_FLOOR_IMAGE'; floorId: string; planId: PlanId; dataUrl: string }
+  | { type: 'SET_FLOOR_PLAN_TYPES'; floorId: string; types: AppState['floorPlanTypes'][string] }
+  | { type: 'SET_FLOOR_IMAGE_LOADING'; value: boolean }
+  | { type: 'SET_MY_DESK'; myDesk: AppState['myDesk'] }
+  | { type: 'MARK_SAVED' }
+  | { type: 'DISCARD_CHANGES' }
+  | { type: 'SET_PENDING_MODE_SWITCH'; mode: AppState['mode'] | null }
   | { type: 'RESET_DEMO'; units: Unit[]; assignments: AppState['assignments']; bookings: Booking[] };
 
 function resetSelectionState(s: AppState): Partial<AppState> {
@@ -176,7 +195,7 @@ export function reducer(state: AppState, action: Action): AppState {
       };
     case 'SELECT_FLOOR_DONE':
       if (action.floorId !== state.floorId) return state;
-      return { ...state, units: action.units, assignments: action.assignments, bookings: action.bookings, loading: false };
+      return { ...state, units: action.units, savedUnits: action.units, unsavedChanges: 0, assignments: action.assignments, bookings: action.bookings, loading: false };
     case 'SET_PLAN':
       return { ...state, planId: action.planId, ...resetSelectionState(state) };
     case 'SET_STAGE_SIZE':
@@ -194,10 +213,12 @@ export function reducer(state: AppState, action: Action): AppState {
 
     case 'SELECT_UNIT':
       return { ...state, selected: action.id, webReassign: null };
+    case 'HIGHLIGHT_UNIT':
+      return { ...state, highlightUnitId: action.id };
     case 'ADD_UNIT':
-      return { ...state, units: [...state.units, action.unit], selected: action.unit.id };
+      return { ...state, units: [...state.units, action.unit], selected: action.unit.id, unsavedChanges: state.unsavedChanges + 1 };
     case 'UPDATE_UNIT':
-      return { ...state, units: state.units.map((u) => (u.id === action.id ? { ...u, ...action.patch } : u)) };
+      return { ...state, units: state.units.map((u) => (u.id === action.id ? { ...u, ...action.patch } : u)), unsavedChanges: state.unsavedChanges + 1 };
     case 'DELETE_UNIT': {
       const assignments = { ...state.assignments };
       delete assignments[action.id];
@@ -207,6 +228,7 @@ export function reducer(state: AppState, action: Action): AppState {
         assignments,
         bookings: state.bookings.filter((b) => b.unitId !== action.id),
         selected: state.selected === action.id ? null : state.selected,
+        unsavedChanges: state.unsavedChanges + 1,
       };
     }
     case 'PUSH_DRAFT_POINT':
@@ -214,7 +236,7 @@ export function reducer(state: AppState, action: Action): AppState {
     case 'CLEAR_DRAFT':
       return { ...state, draft: [] };
     case 'CLOSE_DRAFT':
-      return { ...state, units: [...state.units, action.unit], draft: [], tool: 'select', selected: action.unit.id };
+      return { ...state, units: [...state.units, action.unit], draft: [], tool: 'select', selected: action.unit.id, unsavedChanges: state.unsavedChanges + 1 };
     case 'PUSH_CALIB_POINT':
       return { ...state, calib: state.calib.length >= 2 ? state.calib : [...state.calib, action.pt] };
     case 'SET_CALIB_LEN':
@@ -245,10 +267,24 @@ export function reducer(state: AppState, action: Action): AppState {
       return { ...state, bookModalOpen: action.open, bookPurpose: action.open ? state.bookPurpose : '', bookNotes: action.open ? state.bookNotes : '' };
     case 'SET_BOOK_FIELD':
       return { ...state, [action.field]: action.value } as AppState;
+    case 'SET_BOOK_FORM':
+      return { ...state, bookForm: action.form, bookModalOpen: !!action.form };
+    case 'UPDATE_BOOK_FORM':
+      return { ...state, bookForm: state.bookForm ? { ...state.bookForm, ...action.patch } : state.bookForm };
+    case 'SET_BOOKING_MODULE':
+      return { ...state, bookingModule: action.module };
     case 'ADD_BOOKING':
-      return { ...state, bookings: [...state.bookings, action.booking], bookModalOpen: false, bookPurpose: '', bookNotes: '' };
+      return {
+        ...state,
+        bookings: [...state.bookings, action.booking],
+        bookModalOpen: false,
+        bookForm: null,
+        bookPurpose: '',
+        bookNotes: '',
+        bookingsNonce: state.bookingsNonce + 1,
+      };
     case 'CANCEL_BOOKING':
-      return { ...state, bookings: state.bookings.filter((b) => b.id !== action.id) };
+      return { ...state, bookings: state.bookings.filter((b) => b.id !== action.id), bookingsNonce: state.bookingsNonce + 1 };
     case 'SET_SCHED_VIEW':
       return { ...state, schedView: action.view };
 
@@ -277,6 +313,8 @@ export function reducer(state: AppState, action: Action): AppState {
 
     case 'TOGGLE_PANEL_OPEN':
       return { ...state, panels: { ...state.panels, [action.id]: { ...state.panels[action.id], open: !state.panels[action.id].open } } };
+    case 'SET_PANEL_OPEN':
+      return { ...state, panels: { ...state.panels, [action.id]: { ...state.panels[action.id], open: action.open } } };
     case 'SET_PANEL_POS':
       return { ...state, panels: { ...state.panels, [action.id]: { ...state.panels[action.id], x: action.x, y: action.y } } };
     case 'RESET_LAYOUT':
@@ -289,8 +327,6 @@ export function reducer(state: AppState, action: Action): AppState {
         },
       };
 
-    case 'TOGGLE_MOBILE':
-      return { ...state, mobileOpen: !state.mobileOpen };
     case 'SET_MOBILE_TAB':
       return { ...state, mobileTab: action.tab, mobSel: null };
     case 'SET_MOB_SEL':
@@ -309,10 +345,22 @@ export function reducer(state: AppState, action: Action): AppState {
     case 'SET_UPLOAD_OPEN':
       return { ...state, uploadOpen: action.open };
     case 'SET_FLOOR_IMAGE':
-      return { ...state, floorImages: { ...state.floorImages, [action.floorId]: action.dataUrl } };
+      return { ...state, floorImages: { ...state.floorImages, [floorImageKey(action.floorId, action.planId)]: action.dataUrl } };
+    case 'SET_FLOOR_PLAN_TYPES':
+      return { ...state, floorPlanTypes: { ...state.floorPlanTypes, [action.floorId]: action.types } };
+    case 'SET_FLOOR_IMAGE_LOADING':
+      return { ...state, floorImageLoading: action.value };
+    case 'SET_MY_DESK':
+      return { ...state, myDesk: action.myDesk };
+    case 'MARK_SAVED':
+      return { ...state, savedUnits: state.units, unsavedChanges: 0 };
+    case 'DISCARD_CHANGES':
+      return { ...state, units: state.savedUnits, unsavedChanges: 0, ...resetSelectionState(state) };
+    case 'SET_PENDING_MODE_SWITCH':
+      return { ...state, pendingModeSwitch: action.mode };
 
     case 'RESET_DEMO':
-      return { ...state, units: action.units, assignments: action.assignments, bookings: action.bookings, selected: null, draft: [], calib: [] };
+      return { ...state, units: action.units, savedUnits: action.units, unsavedChanges: 0, assignments: action.assignments, bookings: action.bookings, selected: null, draft: [], calib: [] };
 
     default:
       return state;

@@ -59,12 +59,12 @@ export function Tooltip() {
       </div>
 
       {state.mode === 'book' && bookable && !booked && (
-        <Button variant="primary" fullWidth style={{ marginTop: 10 }} onClick={actions.openBookModal}>
+        <Button variant="primary" fullWidth style={{ marginTop: 10 }} onClick={() => actions.openBookingForm({ unitId: unit.id, date: state.date, start: state.start, end: state.end })}>
           Book
         </Button>
       )}
       {state.mode === 'book' && bookable && booked && (
-        <Button variant="secondary" fullWidth style={{ marginTop: 10 }} onClick={actions.openBookModal}>
+        <Button variant="secondary" fullWidth style={{ marginTop: 10 }} onClick={() => actions.openBookingForm({ unitId: unit.id, date: state.date, start: state.start, end: state.end })}>
           Manage bookings
         </Button>
       )}

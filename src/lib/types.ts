@@ -1,8 +1,36 @@
 export type UnitType = 'workstation' | 'locker' | 'parking' | 'room';
 export type PlanId = 'workstation' | 'locker' | 'parking' | 'custom';
+
+/** Display name per plan type — shared by the plan-type switcher and the per-type empty state. */
+export const PLAN_TYPE_NAME: Record<PlanId, string> = {
+  workstation: 'Workstations',
+  locker: 'Lockers',
+  parking: 'Parking stalls',
+  custom: 'Custom',
+};
+
+/** What you'd place on this plan type, for the empty-state copy ("...to start mapping {this}"). */
+export const PLAN_TYPE_MAPS: Record<PlanId, string> = {
+  workstation: 'desks',
+  locker: 'lockers',
+  parking: 'parking stalls',
+  custom: 'rooms and other spaces',
+};
+
+/** The three real plan types, always offered in the switcher regardless of which are configured. */
+export const ALL_PLAN_TYPES: { id: PlanId; name: string }[] = [
+  { id: 'workstation', name: PLAN_TYPE_NAME.workstation },
+  { id: 'locker', name: PLAN_TYPE_NAME.locker },
+  { id: 'parking', name: PLAN_TYPE_NAME.parking },
+];
 export type AppMode = 'assign' | 'book' | 'edit';
 export type EditTool = 'select' | 'room' | 'workstation' | 'locker' | 'parking' | 'calibrate';
 export type Role = 'admin' | 'manager' | 'employee';
+
+/** Each plan type on a floor can have its own background image — key floorImages by both. */
+export function floorImageKey(floorId: string, planId: PlanId): string {
+  return `${floorId}:${planId}`;
+}
 
 export interface PointGeom {
   kind: 'point';

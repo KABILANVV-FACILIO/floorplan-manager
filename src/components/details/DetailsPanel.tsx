@@ -4,7 +4,6 @@ import { FloatingPanel } from '../primitives/FloatingPanel';
 import { EditPanel } from './EditPanel';
 import { AssignPanel } from './AssignPanel';
 import { BookPanel } from './BookPanel';
-import { BookingModal } from './BookingModal';
 
 const PANEL_WIDTH = 304;
 
@@ -43,7 +42,6 @@ export function DetailsPanel() {
           {state.mode === 'book' && <BookPanel />}
         </div>
       </FloatingPanel>
-      <BookingModal />
     </>
   );
 }

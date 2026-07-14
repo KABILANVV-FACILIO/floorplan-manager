@@ -70,6 +70,14 @@ export function EditPanel() {
         </div>
       </div>
 
+      <div className={card.card}>
+        <div className={card.cardBody}>
+          <Button variant="secondary" fullWidth onClick={() => actions.setUploadOpen(true)}>
+            Upload / replace floorplan image
+          </Button>
+        </div>
+      </div>
+
       {calibActive && (
         <div className={card.card}>
           <div className={card.cardHead}>
@@ -146,13 +154,9 @@ export function EditPanel() {
       <div className={card.card}>
         <div className={card.cardBody}>
           <p className={card.helper}>
-            Placing, editing, and deleting units already saves immediately. Use "Save changes" any time you want an explicit confirmation that
-            everything's persisted.
+            Placing, editing, and deleting units already saves immediately — the "Save changes" bar above the canvas confirms it explicitly.
           </p>
-          <Button variant="primary" fullWidth onClick={actions.saveChanges}>
-            Save changes
-          </Button>
-          <Button variant="secondary" fullWidth style={{ marginTop: 8 }} onClick={actions.resetDemo}>
+          <Button variant="secondary" fullWidth onClick={actions.resetDemo}>
             Reset demo data
           </Button>
         </div>

@@ -1,12 +1,17 @@
+import { useEffect, useRef, useState } from 'react';
 import { useFloorplan } from '../../state/FloorplanContext';
 import { floorMeta } from '../../state/selectors';
-import { fmtTime } from '../../lib/geometry';
+import { fitView, fmtTime, zoomAt } from '../../lib/geometry';
+import type { ViewTransform } from '../../lib/geometry';
+import { IMG_H, IMG_W } from '../../lib/mockData';
 import { FloorplanBackground } from '../canvas/FloorplanBackground';
 import { MobileFloorPicker } from './MobileFloorPicker';
 import { MobileUnitSheet } from './MobileUnitSheet';
 import { MobileTimePicker } from './MobileTimePicker';
 import { unitStatus } from '../../lib/unitStatus';
 import { employeeName, myAssignedUnit } from '../../state/selectors';
+import { floorImageKey } from '../../lib/types';
+import type { Unit } from '../../lib/types';
 import styles from './MobileApp.module.css';
 
 interface MobileAppProps {
@@ -117,44 +122,7 @@ export function MobileApp({ mode, onClose }: MobileAppProps) {
 
           <div className={styles.body}>
             {hasPlan ? (
-              <div className={styles.mapCard}>
-                <FloorplanBackground imageUrl={state.floorImages[state.floorId]} />
-                <svg className={styles.roomOverlay} viewBox="0 0 1492 1054" preserveAspectRatio="none">
-                  {rooms.map((r) =>
-                    r.geom.kind === 'poly' ? (
-                      <polygon
-                        key={r.id}
-                        points={r.geom.pts.map(([x, y]) => `${x * 1492},${y * 1054}`).join(' ')}
-                        fill={roomFill(state.mode, state.bookings, r.id, state.date, state.start, state.end)}
-                      />
-                    ) : null
-                  )}
-                </svg>
-                {markers.map((m) =>
-                  m.geom.kind === 'point' ? (
-                    <button
-                      key={m.id}
-                      className={styles.dot}
-                      style={{
-                        left: `${m.geom.x * 100}%`,
-                        top: `${m.geom.y * 100}%`,
-                        background: dotColorFor(state, m, (id) => employeeName(state, id)),
-                        boxShadow: state.mobSel === m.id ? '0 0 0 4px rgba(0,89,214,0.35)' : '0 0 0 2px #fff',
-                      }}
-                      onClick={() => actions.setMobSel(m.id)}
-                    />
-                  ) : null
-                )}
-                <span className={styles.countPill}>{markers.length} spaces · tap a pin</span>
-                <div className={styles.legend}>
-                  {legend.map((l) => (
-                    <span key={l.label} className={styles.legendChip}>
-                      <span className={styles.legendDot} style={{ background: l.color }} />
-                      {l.label}
-                    </span>
-                  ))}
-                </div>
-              </div>
+              <MobileMap rooms={rooms} markers={markers} legend={legend} />
             ) : (
               <div className={styles.noPlan}>
                 <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="var(--ink-300)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -193,6 +161,196 @@ export function MobileApp({ mode, onClose }: MobileAppProps) {
             </div>
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Pan/zoomable plan viewport for the mobile experience — the plan used to be a fixed 1492px
+ * plane crammed inside a small overflow-hidden card (cropped to the top-left corner, no way to
+ * see the rest). Supports one-finger drag to pan, two-finger pinch to zoom, double-tap to
+ * toggle zoom, mouse-drag/wheel (for the desktop viewport preview), and +/- buttons.
+ */
+function MobileMap({ rooms, markers, legend }: { rooms: Unit[]; markers: Unit[]; legend: { label: string; color: string }[] }) {
+  const { state, actions } = useFloorplan();
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const [view, setView] = useState<ViewTransform | null>(null);
+  const viewRef = useRef<ViewTransform | null>(null);
+  viewRef.current = view;
+  const gesture = useRef<{ mode: 'pan' | 'pinch'; startView: ViewTransform; sx: number; sy: number; startDist?: number; midX?: number; midY?: number } | null>(null);
+  const lastTap = useRef(0);
+
+  // Fit-to-card on mount and whenever the floor/plan changes; ResizeObserver keeps the initial
+  // fit correct once the card actually has a measured size.
+  useEffect(() => {
+    const el = wrapRef.current;
+    if (!el) return;
+    const fit = () => {
+      const r = el.getBoundingClientRect();
+      if (r.width > 20) setView(fitView(r.width, r.height));
+    };
+    fit();
+    const ro = new ResizeObserver(fit);
+    ro.observe(el);
+    return () => ro.disconnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.floorId, state.planId]);
+
+  // Native (non-passive) touch listeners — React's synthetic touch events are passive, so
+  // preventDefault there can't stop the page/pull-to-refresh from scrolling with the gesture.
+  useEffect(() => {
+    const el = wrapRef.current;
+    if (!el) return;
+
+    function dist(t: TouchList) {
+      return Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
+    }
+
+    function onTouchStart(e: TouchEvent) {
+      const v = viewRef.current;
+      if (!v) return;
+      if (e.touches.length === 2) {
+        const r = el!.getBoundingClientRect();
+        gesture.current = {
+          mode: 'pinch',
+          startView: v,
+          sx: 0,
+          sy: 0,
+          startDist: dist(e.touches),
+          midX: (e.touches[0].clientX + e.touches[1].clientX) / 2 - r.left,
+          midY: (e.touches[0].clientY + e.touches[1].clientY) / 2 - r.top,
+        };
+      } else if (e.touches.length === 1) {
+        gesture.current = { mode: 'pan', startView: v, sx: e.touches[0].clientX, sy: e.touches[0].clientY };
+      }
+    }
+    function onTouchMove(e: TouchEvent) {
+      const g = gesture.current;
+      if (!g) return;
+      e.preventDefault();
+      if (g.mode === 'pinch' && e.touches.length === 2 && g.startDist) {
+        const factor = dist(e.touches) / g.startDist;
+        setView(zoomAt(g.startView, factor, g.midX!, g.midY!));
+      } else if (g.mode === 'pan' && e.touches.length === 1) {
+        setView({ ...g.startView, tx: g.startView.tx + (e.touches[0].clientX - g.sx), ty: g.startView.ty + (e.touches[0].clientY - g.sy) });
+      }
+    }
+    function onTouchEnd(e: TouchEvent) {
+      if (e.touches.length === 0) {
+        gesture.current = null;
+        // Double-tap toggles between fit and 2.5x.
+        const now = Date.now();
+        if (now - lastTap.current < 300) {
+          const r = el!.getBoundingClientRect();
+          const fitted = fitView(r.width, r.height);
+          const v = viewRef.current;
+          setView(v && v.z > fitted.z * 1.3 ? fitted : zoomAt(fitted, 2.5, r.width / 2, r.height / 2));
+        }
+        lastTap.current = now;
+      }
+    }
+    function onWheel(e: WheelEvent) {
+      const v = viewRef.current;
+      if (!v) return;
+      e.preventDefault();
+      const r = el!.getBoundingClientRect();
+      setView(zoomAt(v, Math.exp(-e.deltaY * 0.0015), e.clientX - r.left, e.clientY - r.top));
+    }
+
+    el.addEventListener('touchstart', onTouchStart, { passive: true });
+    el.addEventListener('touchmove', onTouchMove, { passive: false });
+    el.addEventListener('touchend', onTouchEnd, { passive: true });
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => {
+      el.removeEventListener('touchstart', onTouchStart);
+      el.removeEventListener('touchmove', onTouchMove);
+      el.removeEventListener('touchend', onTouchEnd);
+      el.removeEventListener('wheel', onWheel);
+    };
+  }, []);
+
+  function onMouseDown(e: React.MouseEvent) {
+    const v = viewRef.current;
+    if (!v || e.button !== 0) return;
+    const start = { sx: e.clientX, sy: e.clientY, sv: v };
+    function move(ev: MouseEvent) {
+      setView({ ...start.sv, tx: start.sv.tx + (ev.clientX - start.sx), ty: start.sv.ty + (ev.clientY - start.sy) });
+    }
+    function up() {
+      window.removeEventListener('mousemove', move);
+      window.removeEventListener('mouseup', up);
+    }
+    window.addEventListener('mousemove', move);
+    window.addEventListener('mouseup', up);
+  }
+
+  function zoomBtn(factor: number) {
+    const el = wrapRef.current;
+    const v = viewRef.current;
+    if (!el || !v) return;
+    const r = el.getBoundingClientRect();
+    setView(zoomAt(v, factor, r.width / 2, r.height / 2));
+  }
+
+  const v = view ?? { tx: 0, ty: 0, z: 0.2 };
+  const invZ = 1 / v.z;
+
+  return (
+    <div ref={wrapRef} className={styles.mapCard} onMouseDown={onMouseDown} style={{ touchAction: 'none' }}>
+      <div
+        style={{
+          position: 'absolute',
+          left: 0,
+          top: 0,
+          width: IMG_W,
+          height: IMG_H,
+          transform: `translate(${v.tx}px, ${v.ty}px) scale(${v.z})`,
+          transformOrigin: '0 0',
+        }}
+      >
+        <FloorplanBackground imageUrl={state.floorImages[floorImageKey(state.floorId, state.planId)]} />
+        <svg style={{ position: 'absolute', inset: 0 }} width={IMG_W} height={IMG_H} viewBox={`0 0 ${IMG_W} ${IMG_H}`}>
+          {rooms.map((r) =>
+            r.geom.kind === 'poly' ? (
+              <polygon
+                key={r.id}
+                points={r.geom.pts.map(([x, y]) => `${x * IMG_W},${y * IMG_H}`).join(' ')}
+                fill={roomFill(state.mode, state.bookings, r.id, state.date, state.start, state.end)}
+              />
+            ) : null
+          )}
+        </svg>
+        {markers.map((m) =>
+          m.geom.kind === 'point' ? (
+            <button
+              key={m.id}
+              className={styles.dot}
+              style={{
+                left: `${m.geom.x * 100}%`,
+                top: `${m.geom.y * 100}%`,
+                background: dotColorFor(state, m, (id) => employeeName(state, id)),
+                boxShadow: state.mobSel === m.id ? '0 0 0 4px rgba(0,89,214,0.35)' : '0 0 0 2px #fff',
+                transform: `translate(-50%, -50%) scale(${Math.min(invZ, 3.5)})`,
+              }}
+              onClick={() => actions.setMobSel(m.id)}
+            />
+          ) : null
+        )}
+      </div>
+
+      <span className={styles.countPill}>{markers.length} spaces · tap a pin</span>
+      <div className={styles.legend}>
+        {legend.map((l) => (
+          <span key={l.label} className={styles.legendChip}>
+            <span className={styles.legendDot} style={{ background: l.color }} />
+            {l.label}
+          </span>
+        ))}
+      </div>
+      <div className={styles.zoomBtns}>
+        <button className={styles.zoomBtn} onClick={() => zoomBtn(1.4)} title="Zoom in">+</button>
+        <button className={styles.zoomBtn} onClick={() => zoomBtn(1 / 1.4)} title="Zoom out">−</button>
       </div>
     </div>
   );

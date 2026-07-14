@@ -1,15 +1,18 @@
 import { useRef } from 'react';
 import { useFloorplan } from '../../state/FloorplanContext';
 import { useMediaQuery } from '../../hooks/useMediaQuery';
-import { NavRail } from './NavRail';
+import { BottomNav } from './BottomNav';
 import { MapStage } from './MapStage';
 import { SettingsScreen } from '../settings/SettingsScreen';
+import { BookingsView } from '../bookings/BookingsView';
+import { PeopleView } from '../people/PeopleView';
+import { BookingModal } from '../details/BookingModal';
 import { MobileApp } from '../mobile/MobileApp';
 import { Toast } from '../primitives/Toast';
 import styles from './AppShell.module.css';
 
 export function AppShell() {
-  const { state, actions } = useFloorplan();
+  const { state } = useFloorplan();
   const isMobileViewport = useMediaQuery('(max-width: 720px)');
   const stageRef = useRef<HTMLDivElement>(null);
 
@@ -25,6 +28,7 @@ export function AppShell() {
     return (
       <div className={styles.mobileRoot}>
         <MobileApp mode="page" />
+        <BookingModal />
         <Toast message={state.toast} />
       </div>
     );
@@ -32,9 +36,17 @@ export function AppShell() {
 
   return (
     <div className={styles.root}>
-      <NavRail />
-      {state.activeView === 'settings' ? <SettingsScreen /> : <MapStage stageRef={stageRef} />}
-      {state.mobileOpen && <MobileApp mode="fullscreen" onClose={actions.toggleMobile} />}
+      {state.activeView === 'settings' ? (
+        <SettingsScreen />
+      ) : state.activeView === 'bookings' ? (
+        <BookingsView />
+      ) : state.activeView === 'people' ? (
+        <PeopleView />
+      ) : (
+        <MapStage stageRef={stageRef} />
+      )}
+      <BottomNav />
+      <BookingModal />
       <Toast message={state.toast} />
     </div>
   );

@@ -278,11 +278,27 @@
   overflow: hidden;
   border: 1px solid var(--ink-200);
 }
-.roomOverlay {
+.zoomBtns {
   position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
+  right: 10px;
+  bottom: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.zoomBtn {
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--ink-200);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.95);
+  color: var(--ink-700);
+  font: 600 16px/1 var(--font-sans);
+  cursor: pointer;
+  box-shadow: var(--shadow-xs);
+}
+.zoomBtn:active {
+  background: var(--ink-050);
 }
 .dot {
   position: absolute;

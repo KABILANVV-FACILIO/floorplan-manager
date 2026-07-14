@@ -29,11 +29,18 @@ declare module '@facilio/api' {
     put<T = any>(url: string, body?: unknown, opts?: Record<string, unknown>): Promise<FacilioApiResult<T>>;
     patch<T = any>(url: string, body?: unknown, opts?: Record<string, unknown>): Promise<FacilioApiResult<T>>;
     delete<T = any>(url: string, body?: unknown, opts?: Record<string, unknown>): Promise<FacilioApiResult<T>>;
-    createRecord<T = any>(moduleName: string, data: Record<string, unknown>, ...rest: any[]): Promise<FacilioApiResult<T>>;
+    /**
+     * The record's own fields go under `data` when SENDING (e.g. `{ data: { name, fileId } }`).
+     * The RESOLVED result, though, nests the record under `res[moduleName]` (e.g.
+     * `res.floor`/`res.indoorfloorplan`), NOT `res.data` — confirmed live against
+     * `fetchRecord`/`createRecord`/`updateRecord`. `res.data` is always undefined; a `.data`
+     * check there silently looks like "not found" instead of a real error.
+     */
+    createRecord<T = any>(moduleName: string, params: { data: Record<string, unknown> }, ...rest: any[]): Promise<FacilioApiResult<T>>;
     fetchRecord<T = any>(moduleName: string, params: { id: string | number; [key: string]: unknown }, ...rest: any[]): Promise<FacilioApiResult<T>>;
     fetchAll<T = any>(moduleName: string, params?: Record<string, unknown>, ...rest: any[]): Promise<FacilioApiListResult<T>>;
-    /** `params` carries BOTH the record id AND the fields to patch in one object (no separate data arg). */
-    updateRecord<T = any>(moduleName: string, params: { id: string | number; [key: string]: unknown }, ...rest: any[]): Promise<FacilioApiResult<T>>;
+    /** `params.id` routes to the record; the fields to patch go under `params.data`. */
+    updateRecord<T = any>(moduleName: string, params: { id: string | number; data: Record<string, unknown> }, ...rest: any[]): Promise<FacilioApiResult<T>>;
     deleteRecord<T = any>(moduleName: string, id: string | number | (string | number)[], ...rest: any[]): Promise<FacilioApiResult<T>>;
     deleteRecords<T = any>(moduleName: string, ids: (string | number)[], ...rest: any[]): Promise<FacilioApiResult<T>>;
     uploadFiles(files: File[], onProgress?: (evt: unknown) => void): Promise<{ error: Error | null; ids?: (string | number)[]; data?: unknown }>;

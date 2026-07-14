@@ -3,22 +3,32 @@ import { useFloorplan } from '../../state/FloorplanContext';
 import { floorMeta } from '../../state/selectors';
 import { Canvas } from '../canvas/Canvas';
 import { EmptyPlanState } from '../canvas/EmptyPlanState';
+import { FloorplanSkeleton } from '../canvas/FloorplanSkeleton';
 import { FloorUploadModal } from '../canvas/FloorUploadModal';
+import { UnsavedChangesModal } from '../canvas/UnsavedChangesModal';
 import { LocationPanel } from '../location/LocationPanel';
 import { DetailsPanel } from '../details/DetailsPanel';
 import { Toolbar } from './Toolbar';
 import { Button } from '../primitives/Button';
+import { floorImageKey } from '../../lib/types';
 import styles from './MapStage.module.css';
 
 export function MapStage({ stageRef }: { stageRef: RefObject<HTMLDivElement> }) {
   const { state, actions } = useFloorplan();
   const floor = floorMeta(state, state.floorId)?.floor;
-  // Whichever data tier actually answered may not agree with the portfolio tier on this floor's
-  // id (e.g. the real @facilio/api portfolio doesn't know the mock demo floor id, or vice versa)
-  // — so render the canvas whenever there's actually something to show, not just when the
-  // portfolio tree's own hasPlan flag happens to line up.
-  const hasContent = state.units.length > 0 || !!state.floorImages[state.floorId];
-  const hasPlan = hasContent || !!floor?.hasPlan;
+  const hasContent = state.units.length > 0 || !!state.floorImages[floorImageKey(state.floorId, state.planId)];
+  // Against the real backend, `state.floorPlanTypes[floorId]` (fetched per-floor on selection)
+  // says exactly which plan types have a floor plan configured — once it's in, trust it over
+  // the coarse `floor.hasPlan` flag, which describes the floor as a whole rather than the
+  // currently-selected plan type. Before it's loaded (undefined) or on the mock tier (never
+  // set), fall back to the old floor-level flag so there's no regression there.
+  const configuredTypes = state.floorPlanTypes[state.floorId];
+  const typeConfigured = configuredTypes ? configuredTypes.some((t) => t.id === state.planId) : !!floor?.hasPlan;
+  const hasPlan = hasContent || typeConfigured;
+  // While the real image fetch/render for this floor/plan is in flight, the shimmer skeleton
+  // takes over the whole stage — the canvas (and its markers) only appears once the actual plan
+  // image is there, never over a placeholder that reads as real-but-wrong data.
+  const showSkeleton = state.floorImageLoading;
 
   const leftPad = state.panels.portfolio.open ? 320 : 76;
   const rightPad = state.panels.details.open ? 336 : 76;
@@ -31,8 +41,18 @@ export function MapStage({ stageRef }: { stageRef: RefObject<HTMLDivElement> }) 
 
       <Toolbar leftPad={leftPad} rightPad={rightPad} />
 
-      {!hasPlan && <EmptyPlanState />}
-      {hasPlan && <Canvas />}
+      {showSkeleton ? <FloorplanSkeleton /> : !hasPlan ? <EmptyPlanState /> : <Canvas />}
+
+      <div className={styles.topBar}>
+        {state.mode === 'edit' && state.unsavedChanges > 0 && (
+          <div className={styles.unsavedBar}>
+            <span>{state.unsavedChanges} unsaved change{state.unsavedChanges === 1 ? '' : 's'}</span>
+            <Button variant="primary" onClick={actions.saveChanges}>
+              Save changes
+            </Button>
+          </div>
+        )}
+      </div>
 
       <DetailsPanel />
 
@@ -49,6 +69,7 @@ export function MapStage({ stageRef }: { stageRef: RefObject<HTMLDivElement> }) 
       )}
 
       <FloorUploadModal />
+      <UnsavedChangesModal />
     </div>
   );
 }

@@ -1,8 +1,9 @@
 import type { DragEvent as ReactDragEvent, MouseEvent as ReactMouseEvent } from 'react';
 import { useFloorplan } from '../../state/FloorplanContext';
-import { employeeName } from '../../state/selectors';
+import { employeeName, myAssignedUnit } from '../../state/selectors';
 import { markerStyle, unitStatus } from '../../lib/unitStatus';
 import type { PointGeom, Unit } from '../../lib/types';
+import styles from './Marker.module.css';
 
 const ICONS = {
   workstation: (
@@ -20,16 +21,23 @@ const ICONS = {
   parking: <span style={{ font: '700 11px/1 var(--font-sans)' }}>P</span>,
 };
 
-export function Marker({ unit, invZ }: { unit: Unit; invZ: number }) {
+export function Marker({ unit, invZ, onDragStart }: { unit: Unit; invZ: number; onDragStart?: (unit: Unit, e: ReactMouseEvent) => void }) {
   const { state, actions } = useFloorplan();
   const geom = unit.geom as PointGeom;
   const style = markerStyle(state, unit);
   const status = unitStatus(state, unit, (id) => employeeName(state, id));
+  const draggable = state.mode === 'edit' && state.tool === 'select';
+  const isMine = myAssignedUnit(state)?.id === unit.id;
+  const isHighlighted = state.highlightUnitId === unit.id;
 
   function onClick(e: ReactMouseEvent) {
     e.stopPropagation();
     if (state.mode === 'edit' && state.tool !== 'select') return;
     actions.selectUnit(unit.id);
+  }
+
+  function onMouseDown(e: ReactMouseEvent) {
+    if (draggable) onDragStart?.(unit, e);
   }
 
   function onDragOver(e: ReactDragEvent) {
@@ -51,34 +59,53 @@ export function Marker({ unit, invZ }: { unit: Unit; invZ: number }) {
   const title = `${unit.label}${unit.room ? ' · ' + unit.room : ''} — ${status.text}`;
 
   return (
-    <div
-      title={title}
-      onClick={onClick}
-      onDragOver={onDragOver}
-      onDragLeave={onDragLeave}
-      onDrop={onDrop}
-      style={{
-        position: 'absolute',
-        left: `${geom.x * 100}%`,
-        top: `${geom.y * 100}%`,
-        width: style.size,
-        height: style.size,
-        transform: `translate(-50%,-50%) scale(${invZ})`,
-        background: style.bg,
-        border: `2px solid ${style.bd}`,
-        color: style.fg,
-        borderRadius: style.radius,
-        boxShadow: style.shadow,
-        opacity: style.opacity,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        cursor: 'pointer',
-        zIndex: style.zIndex,
-      }}
-    >
-      {style.occText && <span style={{ font: '700 9px/1 var(--font-sans)' }}>{style.occText}</span>}
-      {!style.occText && style.icon && ICONS[style.icon]}
-    </div>
+    <>
+      {isMine && (
+        <div
+          className={styles.myDeskBadge}
+          style={{ left: `${geom.x * 100}%`, top: `${geom.y * 100}%`, transform: `translate(-50%, calc(-100% - ${Math.round(style.size / 2 + 6)}px)) scale(${invZ})`, transformOrigin: 'bottom center' }}
+        >
+          <div className={styles.myDeskPill}>
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M20 10c0 6-8 12-8 12S4 16 4 10a8 8 0 0 1 16 0z" />
+              <circle cx="12" cy="10" r="3" />
+            </svg>
+            Your desk
+          </div>
+          <div className={styles.myDeskTail} />
+        </div>
+      )}
+      <div
+        title={title}
+        onClick={onClick}
+        onMouseDown={onMouseDown}
+        onDragOver={onDragOver}
+        onDragLeave={onDragLeave}
+        onDrop={onDrop}
+        style={{
+          position: 'absolute',
+          left: `${geom.x * 100}%`,
+          top: `${geom.y * 100}%`,
+          width: style.size,
+          height: style.size,
+          transform: `translate(-50%,-50%) scale(${invZ})`,
+          background: style.bg,
+          border: `2px solid ${style.bd}`,
+          color: style.fg,
+          borderRadius: style.radius,
+          boxShadow: style.shadow,
+          opacity: style.opacity,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          cursor: draggable ? 'grab' : 'pointer',
+          zIndex: style.zIndex,
+        }}
+      >
+        {isHighlighted && <div className={styles.wave} />}
+        {style.occText && <span style={{ font: '700 9px/1 var(--font-sans)' }}>{style.occText}</span>}
+        {!style.occText && style.icon && ICONS[style.icon]}
+      </div>
+    </>
   );
 }

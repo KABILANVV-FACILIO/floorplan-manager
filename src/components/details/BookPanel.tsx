@@ -79,7 +79,7 @@ export function BookPanel() {
           <div className={card.cardBody}>
             {state.schedView === 'list' ? <ScheduleList unitId={sel.id} /> : <DayTimeline unitId={sel.id} />}
             {!bookedUnitIds(state).has(sel.id) || conflictsFor(state.bookings, sel.id, state.date, state.start, state.end).length === 0 ? (
-              <Button variant="primary" fullWidth style={{ marginTop: 12 }} onClick={actions.openBookModal}>
+              <Button variant="primary" fullWidth style={{ marginTop: 12 }} onClick={() => actions.openBookingForm({ unitId: sel.id, date: state.date, start: state.start, end: state.end })}>
                 New booking
               </Button>
             ) : null}

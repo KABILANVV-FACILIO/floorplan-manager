@@ -44,6 +44,13 @@
 .personRow:hover {
   background: var(--ink-050);
 }
+.openIcon {
+  flex-shrink: 0;
+  color: var(--ink-400);
+}
+.personRow:hover .openIcon {
+  color: var(--blue-500);
+}
 .avatar {
   flex-shrink: 0;
   width: 26px;

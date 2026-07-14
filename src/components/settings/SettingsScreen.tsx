@@ -5,8 +5,9 @@ import { Button } from '../primitives/Button';
 import { moduleColor } from '../../lib/unitStatus';
 import styles from './SettingsScreen.module.css';
 
-const MODULE_TABS: { id: 'permissions' | UnitType; name: string }[] = [
+const MODULE_TABS: { id: 'permissions' | 'bookings' | UnitType; name: string }[] = [
   { id: 'permissions', name: 'Roles & access' },
+  { id: 'bookings', name: 'Bookings' },
   { id: 'workstation', name: 'Desks' },
   { id: 'locker', name: 'Lockers' },
   { id: 'parking', name: 'Parking' },
@@ -51,7 +52,80 @@ export function SettingsScreen() {
           ))}
         </div>
 
-        {state.settingsTab === 'permissions' ? <PermissionsTab /> : <ModuleTab type={state.settingsTab} />}
+        {state.settingsTab === 'permissions' ? (
+          <PermissionsTab />
+        ) : state.settingsTab === 'bookings' ? (
+          <BookingsSettingsTab />
+        ) : (
+          <ModuleTab type={state.settingsTab} />
+        )}
+      </div>
+    </div>
+  );
+}
+
+const BOOKING_MODULES: { id: 'space' | 'facility'; name: string; desc: string }[] = [
+  { id: 'space', name: 'Space booking', desc: 'Book desks, rooms and parking directly for a time window (Facilio spacebooking module).' },
+  { id: 'facility', name: 'Facility booking', desc: 'Book facilities by generated time slots — hot desks, bookable amenities (Facilio facilitybooking module).' },
+];
+
+function BookingsSettingsTab() {
+  const { state, actions } = useFloorplan();
+  return (
+    <div className={styles.card}>
+      <div className={styles.cardHead}>
+        <div>
+          <h3 className={styles.cardTitle}>Booking module</h3>
+          <p className={styles.cardDesc}>
+            Choose how bookings are made across the app. Only one can be active at a time — every booking (calendar and floor plan) routes through the
+            selected module.
+          </p>
+        </div>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: '4px 0' }}>
+        {BOOKING_MODULES.map((m) => {
+          const active = state.bookingModule === m.id;
+          return (
+            <button
+              key={m.id}
+              onClick={() => actions.setBookingModule(m.id)}
+              style={{
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: 12,
+                textAlign: 'left',
+                padding: '14px 16px',
+                borderRadius: 10,
+                border: `1.5px solid ${active ? 'var(--blue-500)' : 'var(--ink-200)'}`,
+                background: active ? 'var(--blue-025)' : '#fff',
+                cursor: 'pointer',
+              }}
+            >
+              <span
+                style={{
+                  marginTop: 2,
+                  width: 18,
+                  height: 18,
+                  borderRadius: '50%',
+                  border: `2px solid ${active ? 'var(--blue-500)' : 'var(--ink-300)'}`,
+                  display: 'grid',
+                  placeItems: 'center',
+                  flexShrink: 0,
+                }}
+              >
+                {active && <span style={{ width: 9, height: 9, borderRadius: '50%', background: 'var(--blue-500)' }} />}
+              </span>
+              <span>
+                <span style={{ display: 'block', font: '600 14px/1.2 var(--font-sans)', color: 'var(--ink-900)' }}>{m.name}</span>
+                <span style={{ display: 'block', marginTop: 3, fontSize: 12.5, color: 'var(--ink-600)' }}>{m.desc}</span>
+              </span>
+            </button>
+          );
+        })}
+      </div>
+      <div className={styles.footNote}>
+        Currently active: <b>{BOOKING_MODULES.find((m) => m.id === state.bookingModule)?.name}</b>. Bookings are also saved locally for now — real{' '}
+        {state.bookingModule === 'space' ? 'spacebooking' : 'facilitybooking'} records are written when the backend is reachable.
       </div>
     </div>
   );
@@ -91,9 +165,30 @@ function PermissionsTab() {
           ))}
         </div>
       ))}
-      <div className={styles.footNote}>
-        You are currently viewing the app as <b>{ROLES.find((r) => r.id === state.role)?.name}</b>. Switch roles from the left sidebar to preview
-        what each role can do.
+      <div className={styles.footNote} style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+        <span>
+          Preview the app as a role:
+        </span>
+        <div style={{ display: 'inline-flex', gap: 4, padding: 4, background: 'var(--ink-050)', border: '1px solid var(--ink-200)', borderRadius: 8 }}>
+          {ROLES.map((r) => (
+            <button
+              key={r.id}
+              onClick={() => actions.setRole(r.id)}
+              style={{
+                height: 28,
+                padding: '0 12px',
+                border: 'none',
+                borderRadius: 6,
+                background: state.role === r.id ? 'var(--blue-500)' : 'transparent',
+                color: state.role === r.id ? '#fff' : 'var(--ink-600)',
+                font: '600 12px/1 var(--font-sans)',
+                cursor: 'pointer',
+              }}
+            >
+              {r.name}
+            </button>
+          ))}
+        </div>
       </div>
     </div>
   );

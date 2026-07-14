@@ -44,7 +44,9 @@ export function MobileUnitSheet() {
           <button
             className={styles.primaryBtn}
             onClick={() => {
-              actions.quickMobileBook(unit.id);
+              // Open the shared booking form (same as desktop) instead of an instant book.
+              actions.openBookingForm({ unitId: unit.id, date: state.date, start: state.start, end: state.end });
+              actions.setMobSel(null);
             }}
           >
             Book · {fmtTime(state.start)}–{fmtTime(state.end)}

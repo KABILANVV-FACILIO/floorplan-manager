@@ -1,10 +1,16 @@
 import { IMG_H, IMG_W } from '../../lib/mockData';
+import { isFacilioApiConfigured } from '../../lib/facilioApi';
 
 /**
  * The original prototype used a rendered raster floorplan image as a static background.
  * That asset isn't available to this rebuild, so this draws a clean, resolution-independent
  * architectural schematic instead — crisper at any zoom level than a raster would be, and it
  * roughly follows the seeded desk/room layout so context still lines up with the overlays.
+ *
+ * The schematic is a MOCK-TIER-ONLY fallback: against the real backend it read as
+ * real-but-wrong data (a made-up building drawn under real markers), so there it's replaced by
+ * a plain blank sheet — the real image renders when it exists, and while it's being fetched the
+ * stage shows the shimmer skeleton instead of this component entirely (see MapStage).
  */
 export function FloorplanBackground({ imageUrl }: { imageUrl?: string }) {
   if (imageUrl) {
@@ -13,6 +19,13 @@ export function FloorplanBackground({ imageUrl }: { imageUrl?: string }) {
         src={imageUrl}
         draggable={false}
         style={{ position: 'absolute', left: 0, top: 0, width: IMG_W, height: IMG_H, boxShadow: 'var(--shadow-md)', pointerEvents: 'none', objectFit: 'cover' }}
+      />
+    );
+  }
+  if (isFacilioApiConfigured) {
+    return (
+      <div
+        style={{ position: 'absolute', left: 0, top: 0, width: IMG_W, height: IMG_H, background: '#fff', boxShadow: 'var(--shadow-md)', pointerEvents: 'none' }}
       />
     );
   }

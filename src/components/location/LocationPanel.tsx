@@ -1,6 +1,8 @@
 import { useFloorplan } from '../../state/FloorplanContext';
 import { floorMeta } from '../../state/selectors';
 import { usePanelDrag } from '../../hooks/usePanelDrag';
+import { isFacilioApiConfigured } from '../../lib/facilioApi';
+import { ALL_PLAN_TYPES } from '../../lib/types';
 import { FloatingPanel } from '../primitives/FloatingPanel';
 import { Select } from '../primitives/Select';
 import { PortfolioTree } from './PortfolioTree';
@@ -22,6 +24,11 @@ export function LocationPanel() {
   const meta = floorMeta(state, state.floorId);
   const floor = meta?.floor;
   const isTree = state.navView === 'tree';
+  // Against the real backend, all three plan types are always offered in the switcher —
+  // whether or not each one has a floor plan configured yet (picking an unconfigured one
+  // shows the empty state with its upload button, same as the original design). The mock
+  // tier keeps its old behavior: only the demo floors that define `plans` show a switcher.
+  const plans = isFacilioApiConfigured ? ALL_PLAN_TYPES : floor?.plans;
 
   return (
     <FloatingPanel
@@ -67,10 +74,10 @@ export function LocationPanel() {
               <path d="M6 9l6 6 6-6" />
             </svg>
           </button>
-          {!isTree && floor?.plans && floor.plans.length > 1 && (
+          {!isTree && plans && plans.length > 1 && (
             <Select
               value={state.planId}
-              options={floor.plans.map((p) => ({ value: p.id, label: p.name }))}
+              options={plans.map((p) => ({ value: p.id, label: p.name }))}
               onChange={(v) => actions.setPlan(v)}
               size="sm"
               fullWidth

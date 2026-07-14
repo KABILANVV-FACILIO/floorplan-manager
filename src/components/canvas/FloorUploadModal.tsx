@@ -7,6 +7,7 @@ import { isCadFile, renderCadToDataUrl } from '../../lib/cadPreview';
 import { renderPdfToDataUrl } from '../../lib/pdfPreview';
 import { isFacilioApiConfigured } from '../../lib/facilioApi';
 import { uploadFloorplanFile } from '../../lib/facilioApiDataSource';
+import { measureImageDataUrl } from '../../lib/geoReference';
 import styles from './FloorUploadModal.module.css';
 
 const ACCEPT = '.png,.jpg,.jpeg,.pdf,.dwg,.dxf,image/png,image/jpeg,application/pdf';
@@ -25,12 +26,13 @@ export function FloorUploadModal() {
     setStatus('working');
     setError(null);
     try {
+      const isPlainImage = /\.(png|jpe?g)$/i.test(file.name);
       let previewUrl: string;
       if (isCadFile(file.name)) {
         previewUrl = await renderCadToDataUrl(file);
       } else if (/\.pdf$/i.test(file.name)) {
         previewUrl = await renderPdfToDataUrl(file);
-      } else if (/\.(png|jpe?g)$/i.test(file.name)) {
+      } else if (isPlainImage) {
         previewUrl = await fileToDataUrl(file);
       } else {
         throw new Error('Unsupported file type');
@@ -40,10 +42,19 @@ export function FloorUploadModal() {
       let attachedToFloorPlan = false;
       if (isFacilioApiConfigured) {
         try {
-          const uploaded = await uploadFloorplanFile(state.floorId, file);
+          // Measured off the already-rendered preview (not the raw file) so it works
+          // uniformly for PDF/DWG/DXF too — sizes the synthetic geo-reference quad
+          // (see geoReference.ts) to this plan's actual aspect ratio.
+          const dimensions = await measureImageDataUrl(previewUrl).catch(() => undefined);
+          const uploaded = await uploadFloorplanFile(state.floorId, state.planId, file, dimensions);
           uploadedFileId = uploaded.fileId;
           attachedToFloorPlan = uploaded.attachedToFloorPlan;
-          previewUrl = uploaded.previewUrl; // prefer the server round-tripped copy once confirmed
+          // The server round-trip (GET .../files/preview/{fileId}) returns the ORIGINAL
+          // uploaded bytes — for a plain image that's a valid <img> source, so it's fine
+          // (better, even — proves the real round-trip) to switch to it. For PDF/DWG/DXF
+          // it's the raw PDF/CAD bytes, which an <img> can't render — keep the local
+          // rendered snapshot as the actual displayed preview for those.
+          if (isPlainImage) previewUrl = uploaded.previewUrl;
           if (!uploaded.attachedToFloorPlan) {
             // eslint-disable-next-line no-console
             console.warn('[FloorUploadModal] Uploaded to Facilio but could not attach to this floor\'s indoorfloorplan record:', uploaded.attachError);
@@ -54,7 +65,7 @@ export function FloorUploadModal() {
         }
       }
 
-      actions.setFloorImage(state.floorId, previewUrl);
+      actions.setFloorImage(state.floorId, state.planId, previewUrl);
       actions.showToast(
         uploadedFileId
           ? attachedToFloorPlan
