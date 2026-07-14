@@ -13,7 +13,11 @@
   background: #fff;
   border-radius: 16px 16px 0 0;
   box-shadow: 0 -8px 24px rgba(40, 54, 72, 0.24);
-  padding: 10px 16px 16px;
+  padding: 10px 16px calc(16px + env(safe-area-inset-bottom));
+  /* Tall content (e.g. the reassign flow's Assigned-to dropdown + actions)
+     must scroll within the sheet, not extend unreachably past the screen. */
+  max-height: calc(100% - 56px);
+  overflow-y: auto;
 }
 .handle {
   width: 36px;

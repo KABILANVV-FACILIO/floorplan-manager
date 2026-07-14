@@ -26,6 +26,8 @@ interface Placement {
   top: number;
   width: number;
   maxHeight: number;
+  /** Listbox opens upward, bottom-anchored to the trigger (translateY(-100%)). */
+  up: boolean;
 }
 
 function computePlacement(trigger: HTMLElement): Placement {
@@ -34,9 +36,15 @@ function computePlacement(trigger: HTMLElement): Placement {
   const vh = window.innerHeight;
   const width = Math.max(rect.width, 168);
   const left = Math.min(Math.max(rect.left, 8), vw - width - 8);
-  const top = rect.bottom + 5;
-  const maxHeight = Math.max(150, vh - top - 12);
-  return { left, top, width, maxHeight };
+  const spaceBelow = vh - rect.bottom - 12;
+  const spaceAbove = rect.top - 12;
+  // Flip upward when there's no room below (triggers near the bottom of the
+  // viewport — e.g. inside the mobile bottom sheet, where a downward listbox
+  // rendered entirely off-screen).
+  if (spaceBelow < 170 && spaceAbove > spaceBelow) {
+    return { left, top: rect.top - 5, width, maxHeight: Math.max(120, spaceAbove - 5), up: true };
+  }
+  return { left, top: rect.bottom + 5, width, maxHeight: Math.max(150, spaceBelow), up: false };
 }
 
 /**
@@ -170,7 +178,14 @@ export function Select<T extends string = string>({
             className={styles.listbox}
             tabIndex={-1}
             onKeyDown={onListKeyDown}
-            style={{ position: 'fixed', left: placement.left, top: placement.top, width: placement.width, maxHeight: placement.maxHeight }}
+            style={{
+              position: 'fixed',
+              left: placement.left,
+              top: placement.top,
+              width: placement.width,
+              maxHeight: placement.maxHeight,
+              transform: placement.up ? 'translateY(-100%)' : undefined,
+            }}
           >
             {options.map((opt, i) => (
               <li

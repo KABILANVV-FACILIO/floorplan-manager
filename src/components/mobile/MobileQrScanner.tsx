@@ -70,8 +70,12 @@ export function MobileQrScanner({ onClose }: { onClose: () => void }) {
   }
 
   useEffect(() => {
-    const hasDetector = 'BarcodeDetector' in window;
-    if (!hasDetector || !navigator.mediaDevices?.getUserMedia) {
+    // Camera scanning needs only getUserMedia: decode via the native
+    // BarcodeDetector where it exists (Chrome/Android), otherwise through the
+    // bundled jsQR decoder on downscaled canvas frames — BarcodeDetector is
+    // missing on iOS Safari, Firefox, and most desktop Chrome builds, which
+    // previously forced those onto manual code entry.
+    if (!navigator.mediaDevices?.getUserMedia) {
       setCameraState('unavailable');
       return;
     }
@@ -89,21 +93,41 @@ export function MobileQrScanner({ onClose }: { onClose: () => void }) {
         videoRef.current.srcObject = stream;
         await videoRef.current.play();
         setCameraState('live');
-        const Detector = (window as unknown as { BarcodeDetector: new (o: { formats: string[] }) => BarcodeDetectorLike })
-          .BarcodeDetector;
-        const detector = new Detector({ formats: ['qr_code'] });
-        timer = setInterval(() => {
-          const video = videoRef.current;
-          if (!video || video.readyState < 2) return;
-          detector
-            .detect(video)
-            .then((codes) => {
-              if (codes.length > 0 && codes[0].rawValue) handleCode(codes[0].rawValue);
-            })
-            .catch(() => {
-              /* per-frame decode errors are normal */
-            });
-        }, 350);
+
+        if ('BarcodeDetector' in window) {
+          const Detector = (window as unknown as { BarcodeDetector: new (o: { formats: string[] }) => BarcodeDetectorLike })
+            .BarcodeDetector;
+          const detector = new Detector({ formats: ['qr_code'] });
+          timer = setInterval(() => {
+            const video = videoRef.current;
+            if (!video || video.readyState < 2) return;
+            detector
+              .detect(video)
+              .then((codes) => {
+                if (codes.length > 0 && codes[0].rawValue) handleCode(codes[0].rawValue);
+              })
+              .catch(() => {
+                /* per-frame decode errors are normal */
+              });
+          }, 350);
+        } else {
+          const { default: jsQR } = await import('jsqr');
+          if (cancelled) return;
+          const canvas = document.createElement('canvas');
+          const ctx = canvas.getContext('2d', { willReadFrequently: true });
+          timer = setInterval(() => {
+            const video = videoRef.current;
+            if (!video || !ctx || video.readyState < 2 || !video.videoWidth) return;
+            // downscale to ~480px wide — plenty for QR, keeps decode cheap
+            const scale = Math.min(1, 480 / video.videoWidth);
+            canvas.width = Math.round(video.videoWidth * scale);
+            canvas.height = Math.round(video.videoHeight * scale);
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const code = jsQR(img.data, img.width, img.height, { inversionAttempts: 'dontInvert' });
+            if (code?.data) handleCode(code.data);
+          }, 450);
+        }
       } catch {
         if (!cancelled) setCameraState('unavailable');
       }
@@ -136,7 +160,9 @@ export function MobileQrScanner({ onClose }: { onClose: () => void }) {
         </div>
       ) : (
         <div className={styles.noCamera}>
-          Camera scanning isn't available in this browser — enter the code printed under the QR instead.
+          Couldn't start the camera — it may be blocked (check the browser's camera permission for
+          this site) or unavailable on this device. You can still enter the code printed under the
+          QR below.
         </div>
       )}
 
