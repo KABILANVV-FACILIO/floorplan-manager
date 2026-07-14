@@ -51,13 +51,15 @@ export function markerStyle(state: AppState, unit: Unit, markerScale = 1): Marke
   const zIndex = selected ? 5 : 2;
   const empId = state.assignments[unit.id];
 
-  // Amenity markers are informational in every mode: solid neutral chip with
-  // the amenity's own glyph, never faded out.
+  // Amenity markers are informational in every mode: white chip outlined and
+  // glyphed in the amenity's own color (stairs teal, elevator amber, …),
+  // filled with that color when selected. Never faded.
   if (unit.type === 'amenity') {
+    const color = AMENITY_META[unit.icon ?? 'asset'].color;
     return {
-      bg: selected ? 'var(--ink-600)' : '#fff',
-      bd: 'var(--ink-600)',
-      fg: selected ? '#fff' : 'var(--ink-700)',
+      bg: selected ? color : '#fff',
+      bd: color,
+      fg: selected ? '#fff' : color,
       opacity: 1,
       shadow,
       size,

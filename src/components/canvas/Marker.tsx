@@ -88,6 +88,12 @@ export function Marker({ unit, invZ, onDragStart }: { unit: Unit; invZ: number; 
 
   const title = `${unit.label}${unit.room ? ' · ' + unit.room : ''} — ${status.text}`;
 
+  // Under-marker label. Assign view: desk name on top, assignee (if any)
+  // underneath. Book view: the space name. Amenities: their name, always.
+  const empId = state.assignments[unit.id];
+  const assignedName = state.mode === 'assign' && empId ? employeeName(state, empId) : null;
+  const showLabel = (state.mode === 'assign' || state.mode === 'book' || unit.type === 'amenity') && invZ <= 1.9;
+
   return (
     <>
       {isMine && (
@@ -136,9 +142,9 @@ export function Marker({ unit, invZ, onDragStart }: { unit: Unit; invZ: number; 
         {style.occText && <span style={{ font: '700 9px/1 var(--font-sans)' }}>{style.occText}</span>}
         {!style.occText && style.icon && ICONS[style.icon]}
       </div>
-      {/* Booking view keeps the full picture: every marker carries its name
-          in a quiet grey chip (amenities show theirs everywhere). */}
-      {(state.mode === 'book' || unit.type === 'amenity') && invZ <= 1.9 && (
+      {/* Under-marker name label — assign view leads with the desk name and
+          shows the assignee beneath; book/amenity show the space name. */}
+      {showLabel && (
         <div
           style={{
             position: 'absolute',
@@ -148,16 +154,19 @@ export function Marker({ unit, invZ, onDragStart }: { unit: Unit; invZ: number; 
             transformOrigin: 'top center',
             pointerEvents: 'none',
             zIndex: 1,
-            font: '500 8.5px/1 var(--font-sans)',
-            color: 'var(--ink-600)',
-            background: 'rgba(255,255,255,0.88)',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: 1,
+            background: 'rgba(255,255,255,0.9)',
             border: '1px solid var(--ink-100)',
             padding: '2px 5px',
             borderRadius: 3,
             whiteSpace: 'nowrap',
           }}
         >
-          {unit.label}
+          <span style={{ font: '600 8.5px/1.1 var(--font-sans)', color: 'var(--ink-700)' }}>{unit.label}</span>
+          {assignedName && <span style={{ font: '500 8px/1.1 var(--font-sans)', color: 'var(--ink-500)' }}>{assignedName}</span>}
         </div>
       )}
     </>

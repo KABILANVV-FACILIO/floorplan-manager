@@ -4,12 +4,12 @@ export type PlanId = 'workstation' | 'locker' | 'parking' | 'custom';
 /** Informational point markers (not assignable/bookable), shown on every plan type. */
 export type AmenityIcon = 'asset' | 'fire' | 'stairs' | 'elevator' | 'restroom';
 
-export const AMENITY_META: Record<AmenityIcon, { name: string; prefix: string }> = {
-  asset: { name: 'Asset', prefix: 'AS' },
-  fire: { name: 'Fire extinguisher', prefix: 'FE' },
-  stairs: { name: 'Stairs', prefix: 'ST' },
-  elevator: { name: 'Elevator', prefix: 'EL' },
-  restroom: { name: 'Restroom', prefix: 'RR' },
+export const AMENITY_META: Record<AmenityIcon, { name: string; prefix: string; color: string }> = {
+  asset: { name: 'Asset', prefix: 'AS', color: '#6d5bd0' },
+  fire: { name: 'Fire extinguisher', prefix: 'FE', color: '#d64545' },
+  stairs: { name: 'Stairs', prefix: 'ST', color: '#0d9488' },
+  elevator: { name: 'Elevator', prefix: 'EL', color: '#c77d11' },
+  restroom: { name: 'Restroom', prefix: 'RR', color: '#2f6fdb' },
 };
 
 export const AMENITY_ICONS: AmenityIcon[] = ['asset', 'fire', 'stairs', 'elevator', 'restroom'];

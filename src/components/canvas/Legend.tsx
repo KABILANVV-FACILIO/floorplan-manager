@@ -1,5 +1,7 @@
 import { useFloorplan } from '../../state/FloorplanContext';
 import { moduleColor } from '../../lib/unitStatus';
+import { AMENITY_META } from '../../lib/types';
+import type { AmenityIcon } from '../../lib/types';
 
 export function Legend() {
   const { state } = useFloorplan();
@@ -23,6 +25,15 @@ export function Legend() {
       { label: 'Booked', color: moduleColor(state, 'room', 'booked') },
       { label: 'Not bookable', color: 'var(--ink-400)' },
     ];
+  }
+
+  // Add a color tag for each amenity type actually placed on this floor
+  // (stairs, elevators, restrooms, …) so their marker colors are legible.
+  const presentAmenities = Array.from(
+    new Set(state.units.filter((u) => u.type === 'amenity' && u.icon).map((u) => u.icon as AmenityIcon)),
+  );
+  for (const icon of presentAmenities) {
+    items.push({ label: AMENITY_META[icon].name, color: AMENITY_META[icon].color });
   }
 
   return (
