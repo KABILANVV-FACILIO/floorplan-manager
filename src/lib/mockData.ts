@@ -1,6 +1,7 @@
 import type { Assignments, Booking, Employee, Site, Unit } from './types';
+import { RCU_ASSIGNMENTS, RCU_EMPLOYEES, RCU_PORTFOLIO, RCU_UNITS } from './rcuData';
 
-export const EMPLOYEES: Employee[] = [
+const DEMO_EMPLOYEES: Employee[] = [
   { id: 'e1', name: 'Priya Kumar', dept: 'Operations' },
   { id: 'e2', name: 'Jonas Weber', dept: 'Engineering' },
   { id: 'e3', name: 'Maria Silva', dept: 'Finance' },
@@ -17,7 +18,10 @@ export const EMPLOYEES: Employee[] = [
   { id: 'e14', name: 'Julia Wagner', dept: 'Finance' },
 ];
 
-export const PORTFOLIO: Site[] = [
+/** Demo people first (booking seeds reference e1..e14), then the RCU roster. */
+export const EMPLOYEES: Employee[] = [...DEMO_EMPLOYEES, ...RCU_EMPLOYEES];
+
+const DEMO_PORTFOLIO: Site[] = [
   {
     id: 'sBer',
     name: 'HQ Berlin',
@@ -78,6 +82,9 @@ export const PORTFOLIO: Site[] = [
     ],
   },
 ];
+
+/** RCU occupancy export (real test data, see lib/rcuData.ts) leads; demo sites kept for the positioned hqA3 plan. */
+export const PORTFOLIO: Site[] = [...RCU_PORTFOLIO, ...DEMO_PORTFOLIO];
 
 function planForType(type: Unit['type']): Unit['plan'] {
   if (type === 'workstation' || type === 'locker' || type === 'parking') return type;
@@ -154,11 +161,11 @@ export function seedUnits(): Unit[] {
       floor: 'hqA3',
     });
   });
-  return U.map((u) => ({ ...u, plan: planForType(u.type) }));
+  return [...U.map((u) => ({ ...u, plan: planForType(u.type) })), ...RCU_UNITS];
 }
 
 export function seedAssignments(): Assignments {
-  return { ws1: 'e1', ws2: 'e2', ws4: 'e3', ws7: 'e4', ws9: 'e5', ws13: 'e6', ws17: 'e7', ws21: 'e8' };
+  return { ws1: 'e1', ws2: 'e2', ws4: 'e3', ws7: 'e4', ws9: 'e5', ws13: 'e6', ws17: 'e7', ws21: 'e8', ...RCU_ASSIGNMENTS };
 }
 
 export function seedBookings(date: string): Booking[] {

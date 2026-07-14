@@ -23,7 +23,7 @@ export interface FloorplanDataSource {
   createBooking(input: Omit<Booking, 'id'>): Promise<Booking>;
 }
 
-const LS_KEY = 'facilio_floorplan_proto_v1';
+const LS_KEY = 'facilio_floorplan_proto_v2';
 
 interface PersistedShape {
   units: Unit[];
