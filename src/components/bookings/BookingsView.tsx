@@ -82,6 +82,22 @@ export function BookingsView() {
     [state.units, category]
   );
 
+  // Location switcher: every floor in the portfolio, so the calendar can move between floors
+  // (and buildings/sites — the sublabel disambiguates) without a round trip through the map view.
+  const floorOptions = useMemo(
+    () =>
+      state.portfolio.flatMap((site) =>
+        site.buildings.flatMap((building) =>
+          building.floors.map((floor) => ({
+            value: floor.id,
+            label: floor.name,
+            sublabel: `${site.name} · ${building.name}`,
+          }))
+        )
+      ),
+    [state.portfolio]
+  );
+
   // Keep a valid resource selected as category/floor changes.
   useEffect(() => {
     if (!resources.length) {
@@ -202,10 +218,20 @@ export function BookingsView() {
                   <span className={styles.crumbSep}>/</span>
                   <span>{meta.building.name}</span>
                   <span className={styles.crumbSep}>/</span>
-                  <span className={styles.crumbCurrent}>{meta.floor.name}</span>
                 </>
               ) : (
                 <span>Workplace</span>
+              )}
+              {/* The floor crumb is the location switcher — picking a floor (any building/site)
+                  reloads units+bookings via selectFloor, and the calendar refetches off floorId. */}
+              {floorOptions.length > 0 && (
+                <Select
+                  value={state.floorId}
+                  options={floorOptions}
+                  onChange={(floorId) => actions.selectFloor(floorId)}
+                  size="sm"
+                  aria-label="Floor"
+                />
               )}
             </div>
             <h1 className={styles.h1}>Bookings</h1>
