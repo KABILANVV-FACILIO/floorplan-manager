@@ -206,26 +206,44 @@ function buildActions(state: AppState, dispatch: Dispatch<Action>, canvasRectRef
     confirmSaveAndSwitch: async () => {
       const target = state.pendingModeSwitch;
       if (!target) return;
+      // The modal stays up with a loader on the Save button while persisting (saving flag) —
+      // saving must complete before the switch, unlike discard, which is instant.
+      dispatch({ type: 'SET_SAVING', value: true });
       try {
         await persistUnits(state.floorId, state.units);
         dispatch({ type: 'MARK_SAVED' });
       } catch {
         showToast('Could not save changes');
+      } finally {
+        dispatch({ type: 'SET_SAVING', value: false });
       }
       dispatch({ type: 'SET_MODE', mode: target });
       if (target === 'assign' || target === 'book') dispatch({ type: 'SET_PANEL_OPEN', id: 'details', open: true });
       dispatch({ type: 'SET_PENDING_MODE_SWITCH', mode: null });
     },
-    confirmDiscardAndSwitch: async () => {
+    confirmDiscardAndSwitch: () => {
       const target = state.pendingModeSwitch;
       if (!target) return;
+      // Discard is local (revert to the saved snapshot) — close the popup and switch modes
+      // IMMEDIATELY; the store re-persist below is backend housekeeping the user shouldn't
+      // wait on (it used to hold the modal open for the full round trip).
       dispatch({ type: 'DISCARD_CHANGES' });
-      // Auto-save already pushed the now-discarded edits to the backing store per action —
-      // re-persist the reverted snapshot so it actually matches what's shown after discarding.
-      await persistUnits(state.floorId, state.savedUnits).catch(() => {});
       dispatch({ type: 'SET_MODE', mode: target });
       if (target === 'assign' || target === 'book') dispatch({ type: 'SET_PANEL_OPEN', id: 'details', open: true });
       dispatch({ type: 'SET_PENDING_MODE_SWITCH', mode: null });
+      // Auto-save already pushed the now-discarded edits per action — re-persist the reverted
+      // snapshot in the background so the store matches what's shown.
+      void persistUnits(state.floorId, state.savedUnits).catch(() => {});
+    },
+    /**
+     * In-place discard (the ✕ on the unsaved-changes bar): revert to the last-saved snapshot and
+     * STAY in edit mode — unlike confirmDiscardAndSwitch, which discards on the way out.
+     */
+    discardChanges: () => {
+      dispatch({ type: 'DISCARD_CHANGES' });
+      showToast('Changes discarded');
+      // Background housekeeping, same as confirmDiscardAndSwitch.
+      void persistUnits(state.floorId, state.savedUnits).catch(() => {});
     },
     setTool: (tool: AppState['tool']) => dispatch({ type: 'SET_TOOL', tool }),
     setAmenityIcon: (icon: AmenityIcon) => dispatch({ type: 'SET_AMENITY_ICON', icon }),
@@ -851,12 +869,15 @@ function buildActions(state: AppState, dispatch: Dispatch<Action>, canvasRectRef
      * confirmation, for a visible "did my changes actually save" signal.
      */
     saveChanges: async () => {
+      dispatch({ type: 'SET_SAVING', value: true });
       try {
         await persistUnits(state.floorId, state.units);
         dispatch({ type: 'MARK_SAVED' });
         showToast('Changes saved');
       } catch (err) {
         showToast('Could not save changes');
+      } finally {
+        dispatch({ type: 'SET_SAVING', value: false });
       }
     },
   };

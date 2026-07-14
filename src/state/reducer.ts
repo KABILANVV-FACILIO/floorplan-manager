@@ -67,6 +67,7 @@ export function buildInitialState(): AppState {
     pendingPlacement: null,
     savedUnits: [],
     unsavedChanges: 0,
+    saving: false,
     pendingModeSwitch: null,
     assignments: {},
     bookings: [],
@@ -208,6 +209,7 @@ export type Action =
   | { type: 'SET_FLOOR_IMAGE_LOADING'; value: boolean }
   | { type: 'SET_MY_DESK'; myDesk: AppState['myDesk'] }
   | { type: 'MARK_SAVED' }
+  | { type: 'SET_SAVING'; value: boolean }
   | { type: 'DISCARD_CHANGES' }
   | { type: 'SET_PENDING_MODE_SWITCH'; mode: AppState['mode'] | null }
   | { type: 'RESET_DEMO'; units: Unit[]; assignments: AppState['assignments']; bookings: Booking[] };
@@ -474,6 +476,8 @@ export function reducer(state: AppState, action: Action): AppState {
       return { ...state, floorImageLoading: action.value };
     case 'SET_MY_DESK':
       return { ...state, myDesk: action.myDesk };
+    case 'SET_SAVING':
+      return { ...state, saving: action.value };
     case 'MARK_SAVED':
       return { ...state, savedUnits: state.units, unsavedChanges: 0 };
     case 'DISCARD_CHANGES':

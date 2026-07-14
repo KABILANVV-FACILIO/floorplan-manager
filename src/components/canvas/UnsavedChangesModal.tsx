@@ -1,6 +1,7 @@
 import { useFloorplan } from '../../state/FloorplanContext';
 import { Modal, ModalFooter, ModalHeader } from '../primitives/Modal';
 import { Button } from '../primitives/Button';
+import { ButtonSpinner } from '../primitives/ButtonSpinner';
 
 const MODE_LABEL: Record<string, string> = { assign: 'Assignment', book: 'Booking' };
 
@@ -24,11 +25,12 @@ export function UnsavedChangesModal() {
         <Button variant="secondary" onClick={actions.cancelModeSwitch}>
           Cancel
         </Button>
-        <Button variant="danger" onClick={actions.confirmDiscardAndSwitch}>
+        <Button variant="danger" disabled={state.saving} onClick={actions.confirmDiscardAndSwitch}>
           Discard
         </Button>
-        <Button variant="primary" onClick={actions.confirmSaveAndSwitch}>
-          Save changes
+        <Button variant="primary" disabled={state.saving} onClick={actions.confirmSaveAndSwitch}>
+          {state.saving && <ButtonSpinner />}
+          {state.saving ? 'Saving…' : 'Save changes'}
         </Button>
       </ModalFooter>
     </Modal>

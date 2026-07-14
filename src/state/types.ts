@@ -54,6 +54,8 @@ export interface AppState {
    * floating "N unsaved changes" bar and the save/discard prompt on mode switch.
    */
   unsavedChanges: number;
+  /** True while an explicit save (bar button / save-and-switch) persists — drives button loaders. */
+  saving: boolean;
   /** Mode the user tried to switch to while there were unsaved edit changes — set while the save/discard confirmation is open. */
   pendingModeSwitch: AppMode | null;
   assignments: Assignments;
