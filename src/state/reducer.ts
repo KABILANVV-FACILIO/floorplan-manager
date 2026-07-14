@@ -84,6 +84,7 @@ export function buildInitialState(): AppState {
     mobAssignEdit: false,
 
     uploadOpen: false,
+    autoMapGroups: null,
     myDesk: null,
     floorImages: {},
     floorPlanTypes: {},
@@ -110,6 +111,7 @@ export type Action =
   | { type: 'SELECT_UNIT'; id: string | null }
   | { type: 'HIGHLIGHT_UNIT'; id: string | null }
   | { type: 'ADD_UNIT'; unit: Unit }
+  | { type: 'ADD_UNITS'; units: Unit[] }
   | { type: 'UPDATE_UNIT'; id: string; patch: Partial<Unit> }
   | { type: 'DELETE_UNIT'; id: string }
   | { type: 'PUSH_DRAFT_POINT'; pt: [number, number] }
@@ -154,6 +156,7 @@ export type Action =
   | { type: 'SET_MOB_TIME_PICK'; which: AppState['mobTimePick'] }
   | { type: 'SET_MOB_ASSIGN_EDIT'; value: boolean }
   | { type: 'SET_UPLOAD_OPEN'; open: boolean }
+  | { type: 'SET_AUTOMAP_GROUPS'; groups: AppState['autoMapGroups'] }
   | { type: 'SET_FLOOR_IMAGE'; floorId: string; planId: PlanId; dataUrl: string }
   | { type: 'SET_FLOOR_PLAN_TYPES'; floorId: string; types: AppState['floorPlanTypes'][string] }
   | { type: 'SET_FLOOR_IMAGE_LOADING'; value: boolean }
@@ -217,6 +220,8 @@ export function reducer(state: AppState, action: Action): AppState {
       return { ...state, highlightUnitId: action.id };
     case 'ADD_UNIT':
       return { ...state, units: [...state.units, action.unit], selected: action.unit.id, unsavedChanges: state.unsavedChanges + 1 };
+    case 'ADD_UNITS':
+      return { ...state, units: [...state.units, ...action.units], unsavedChanges: state.unsavedChanges + action.units.length };
     case 'UPDATE_UNIT':
       return { ...state, units: state.units.map((u) => (u.id === action.id ? { ...u, ...action.patch } : u)), unsavedChanges: state.unsavedChanges + 1 };
     case 'DELETE_UNIT': {
@@ -344,6 +349,8 @@ export function reducer(state: AppState, action: Action): AppState {
 
     case 'SET_UPLOAD_OPEN':
       return { ...state, uploadOpen: action.open };
+    case 'SET_AUTOMAP_GROUPS':
+      return { ...state, autoMapGroups: action.groups };
     case 'SET_FLOOR_IMAGE':
       return { ...state, floorImages: { ...state.floorImages, [floorImageKey(action.floorId, action.planId)]: action.dataUrl } };
     case 'SET_FLOOR_PLAN_TYPES':

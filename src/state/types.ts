@@ -13,6 +13,7 @@ import type {
   UnitType,
 } from '../lib/types';
 import type { ViewTransform } from '../lib/geometry';
+import type { CadGroup } from '../lib/cadAnalyze';
 
 export type SpaceFilter = 'all' | UnitType;
 
@@ -92,6 +93,8 @@ export interface AppState {
   mobAssignEdit: boolean;
 
   uploadOpen: boolean;
+  /** Mappable structure of the last-uploaded CAD file — non-null while the auto-map modal is open. */
+  autoMapGroups: CadGroup[] | null;
   /** The logged-in user's real assigned/booked desk (from servicePortalHome) — powers "My desk" against the real backend, where `assignments` (mock-derived) can't. */
   myDesk: { recordId: number; name: string; floorId: string | null; booked: boolean } | null;
   floorImages: Record<string, string>;

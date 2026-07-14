@@ -1,0 +1,7 @@
+{
+  "name": "Floorplan Manager",
+  "app": "iwmsfloorplan",
+  "build": {
+    "publish": "dist"
+  }
+}

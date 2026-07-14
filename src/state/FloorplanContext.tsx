@@ -3,7 +3,8 @@ import type { Dispatch, MutableRefObject, ReactNode } from 'react';
 import { dataSource } from '../lib/dataSource';
 import { PORTFOLIO as MOCK_PORTFOLIO, EMPLOYEES as MOCK_EMPLOYEES, seedBookings, seedUnits, seedAssignments } from '../lib/mockData';
 import { floorImageKey, TYPE_META } from '../lib/types';
-import type { Booking, PlanId, Role, Site, Unit } from '../lib/types';
+import type { Booking, PlanId, Role, Site, Unit, UnitType } from '../lib/types';
+import type { CadGroup } from '../lib/cadAnalyze';
 import { isFacilioApiConfigured } from '../lib/facilioApi';
 import { assignUnitReal, createRealBooking, fetchFloorplanImage, fetchMyDesk, findUnitIdForDeskRecord, getFloorPlanSummary, saveFloorplanMarkers, vacateUnitReal } from '../lib/facilioApiDataSource';
 import { buildInitialState, reducer } from './reducer';
@@ -283,6 +284,76 @@ function buildActions(state: AppState, dispatch: Dispatch<Action>, canvasRectRef
       showToast(`${label} created — rename it in the Selection panel`);
     },
     clearDraft: () => dispatch({ type: 'CLEAR_DRAFT' }),
+
+    openAutoMap: (groups: CadGroup[]) => dispatch({ type: 'SET_AUTOMAP_GROUPS', groups }),
+    closeAutoMap: () => dispatch({ type: 'SET_AUTOMAP_GROUPS', groups: null }),
+    /**
+     * Materialize the auto-map modal's choices into units. Rooms are created
+     * first so point units (desks/lockers/parking) can be containment-tagged
+     * with the room they fall inside — same rule as manual placePoint.
+     */
+    applyAutoMap: (mapping: Record<string, UnitType | 'ignore'>) => {
+      const groups = state.autoMapGroups ?? [];
+      const counters: Record<UnitType, number> = {
+        workstation: state.units.filter((u) => u.type === 'workstation').length,
+        locker: state.units.filter((u) => u.type === 'locker').length,
+        parking: state.units.filter((u) => u.type === 'parking').length,
+        room: state.units.filter((u) => u.type === 'room').length,
+      };
+      const pad = (n: number) => String(n).padStart(2, '0');
+      const created: Unit[] = [];
+      let idSeq = Date.now();
+
+      const ordered = [...groups].sort(
+        (a, b) => (mapping[b.key] === 'room' ? 1 : 0) - (mapping[a.key] === 'room' ? 1 : 0),
+      );
+      for (const group of ordered) {
+        const type = mapping[group.key];
+        if (!type || type === 'ignore') continue;
+        for (const item of group.items) {
+          if (type === 'room') {
+            if (!item.poly) continue;
+            counters.room += 1;
+            created.push({
+              id: 'u' + idSeq++,
+              type: 'room',
+              label: `${TYPE_META.room.prefix}-${pad(counters.room)}`,
+              room: null,
+              geom: { kind: 'poly', pts: item.poly },
+              floor: state.floorId,
+              plan: 'custom',
+            });
+          } else {
+            if (!item.point) continue;
+            const [x, y] = item.point;
+            counters[type] += 1;
+            const rooms = [...state.units, ...created].filter((u) => u.type === 'room');
+            const room = rooms.find((r) => r.geom.kind === 'poly' && pointInPoly({ x, y }, r.geom.pts));
+            created.push({
+              id: 'u' + idSeq++,
+              type,
+              label: `${TYPE_META[type].prefix}-${pad(counters[type])}`,
+              secondary: group.blockName ? `CAD block · ${group.blockName}` : `CAD layer · ${group.layer}`,
+              room: room ? room.label : null,
+              geom: { kind: 'point', x, y },
+              floor: state.floorId,
+              plan: type,
+            });
+          }
+        }
+      }
+
+      if (created.length > 0) {
+        dispatch({ type: 'ADD_UNITS', units: created });
+        dataSource.saveUnits(state.floorId, [...state.units, ...created]);
+      }
+      dispatch({ type: 'SET_AUTOMAP_GROUPS', groups: null });
+      showToast(
+        created.length > 0
+          ? `${created.length} units mapped from CAD metadata — review and Save changes`
+          : 'Nothing was mapped',
+      );
+    },
     isNearFirstDraftPoint: (pt: [number, number]) => {
       if (state.draft.length < 3) return false;
       return distNormToPx(state.draft[0], pt, state.view.z) < 12;

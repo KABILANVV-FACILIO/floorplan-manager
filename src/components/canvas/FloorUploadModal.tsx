@@ -3,7 +3,9 @@ import type { DragEvent as ReactDragEvent } from 'react';
 import { useFloorplan } from '../../state/FloorplanContext';
 import { Modal, ModalFooter, ModalHeader } from '../primitives/Modal';
 import { Button } from '../primitives/Button';
-import { isCadFile, renderCadToDataUrl } from '../../lib/cadPreview';
+import { isCadFile } from '../../lib/cadPreview';
+import { analyzeCadFile } from '../../lib/cadAnalyze';
+import type { CadGroup } from '../../lib/cadAnalyze';
 import { renderPdfToDataUrl } from '../../lib/pdfPreview';
 import { isFacilioApiConfigured } from '../../lib/facilioApi';
 import { uploadFloorplanFile } from '../../lib/facilioApiDataSource';
@@ -28,8 +30,14 @@ export function FloorUploadModal() {
     try {
       const isPlainImage = /\.(png|jpe?g)$/i.test(file.name);
       let previewUrl: string;
+      let cadGroups: CadGroup[] = [];
       if (isCadFile(file.name)) {
-        previewUrl = await renderCadToDataUrl(file);
+        // One document-open pass renders the snapshot AND extracts the
+        // drawing's mappable structure (blocks/polylines/circles by layer)
+        // for the auto-map modal.
+        const analysis = await analyzeCadFile(file);
+        previewUrl = analysis.previewUrl;
+        cadGroups = analysis.groups;
       } else if (/\.pdf$/i.test(file.name)) {
         previewUrl = await renderPdfToDataUrl(file);
       } else if (isPlainImage) {
@@ -75,6 +83,11 @@ export function FloorUploadModal() {
       );
       actions.setUploadOpen(false);
       setStatus('idle');
+      if (cadGroups.length > 0) {
+        actions.openAutoMap(cadGroups);
+      } else if (isCadFile(file.name)) {
+        actions.showToast(`Floorplan updated from ${file.name} — no mappable CAD metadata found`);
+      }
     } catch (err) {
       setStatus('error');
       setError(isCadFile(file.name) ? 'Could not render this CAD file in the browser. You can still store it and view it in AutoCAD.' : (err as Error).message || 'Could not read this file.');
