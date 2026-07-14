@@ -7,14 +7,14 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 34px;
+  gap: 26px;
   padding: 48px;
   background: #f7f9fc;
 }
 
 .card {
   position: relative;
-  width: min(62vw, 432px);
+  width: min(48vw, 352px);
   aspect-ratio: 432 / 312;
   background: #fff;
   border: 1px solid var(--ink-200, #d8e3f1);
@@ -119,7 +119,7 @@
 
 .progressTrack {
   position: relative;
-  width: 220px;
+  width: 184px;
   height: 5px;
   border-radius: 999px;
   background: var(--ink-100, #e9eff7);
