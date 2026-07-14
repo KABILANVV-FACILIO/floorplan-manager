@@ -142,9 +142,32 @@ export function Marker({ unit, invZ, onDragStart }: { unit: Unit; invZ: number; 
         {style.occText && <span style={{ font: '700 9px/1 var(--font-sans)' }}>{style.occText}</span>}
         {!style.occText && style.icon && ICONS[style.icon]}
       </div>
-      {/* Under-marker name label — assign view leads with the desk name and
-          shows the assignee beneath; book/amenity show the space name. */}
-      {showLabel && (
+      {/* Primary name label ABOVE the marker (hidden when the "Your desk"
+          pill already sits above it, to avoid stacking two labels). */}
+      {showLabel && !isMine && (
+        <div
+          style={{
+            position: 'absolute',
+            left: `${geom.x * 100}%`,
+            top: `${geom.y * 100}%`,
+            transform: `translate(-50%, calc(-100% - ${Math.round(style.size / 2 + 4)}px)) scale(${invZ})`,
+            transformOrigin: 'bottom center',
+            pointerEvents: 'none',
+            zIndex: 1,
+            font: '600 8.5px/1.1 var(--font-sans)',
+            color: 'var(--ink-700)',
+            background: 'rgba(255,255,255,0.9)',
+            border: '1px solid var(--ink-100)',
+            padding: '2px 5px',
+            borderRadius: 3,
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {unit.label}
+        </div>
+      )}
+      {/* Secondary label (assignee) BELOW the marker. */}
+      {showLabel && assignedName && (
         <div
           style={{
             position: 'absolute',
@@ -154,10 +177,8 @@ export function Marker({ unit, invZ, onDragStart }: { unit: Unit; invZ: number; 
             transformOrigin: 'top center',
             pointerEvents: 'none',
             zIndex: 1,
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            gap: 1,
+            font: '500 8px/1.1 var(--font-sans)',
+            color: 'var(--ink-500)',
             background: 'rgba(255,255,255,0.9)',
             border: '1px solid var(--ink-100)',
             padding: '2px 5px',
@@ -165,8 +186,7 @@ export function Marker({ unit, invZ, onDragStart }: { unit: Unit; invZ: number; 
             whiteSpace: 'nowrap',
           }}
         >
-          <span style={{ font: '600 8.5px/1.1 var(--font-sans)', color: 'var(--ink-700)' }}>{unit.label}</span>
-          {assignedName && <span style={{ font: '500 8px/1.1 var(--font-sans)', color: 'var(--ink-500)' }}>{assignedName}</span>}
+          {assignedName}
         </div>
       )}
     </>
