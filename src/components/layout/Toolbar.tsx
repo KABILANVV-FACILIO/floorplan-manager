@@ -38,7 +38,8 @@ export function Toolbar({ leftPad, rightPad }: { leftPad: number; rightPad: numb
           Edit
         </button>
 
-        {hasMyDesk && (
+        {/* Personal wayfinding has no place while editing the plan itself. */}
+        {hasMyDesk && state.mode !== 'edit' && (
           <button className={styles.myDesk} title="Locate my desk" onClick={onMyDesk}>
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M12 2v3M12 19v3M2 12h3M19 12h3" />

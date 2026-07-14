@@ -1,3 +1,4 @@
+import type { DragEvent as ReactDragEvent } from 'react';
 import { useFloorplan } from '../../state/FloorplanContext';
 import { employeeName } from '../../state/selectors';
 import { unitSortCompare } from '../../lib/geometry';
@@ -17,9 +18,37 @@ const FILTERS: { id: SpaceFilter; label: string }[] = [
   { id: 'parking', label: 'Parking' },
 ];
 
+/** The type glyphs used as drag ghosts — same iconography as the edit palette. */
+const DRAG_GLYPH: Partial<Record<Unit['type'], { svg: string; color: string }>> = {
+  workstation: { svg: '<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/>', color: '#0059D6' },
+  locker: { svg: '<rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>', color: '#3C229D' },
+  parking: { svg: '<circle cx="12" cy="12" r="9"/><path d="M12 8v8M9 8h3.5a2.5 2.5 0 0 1 0 5H9"/>', color: '#43516B' },
+};
+
+/**
+ * Replaces the browser's default whole-row drag snapshot with a compact type logo (desk glyph
+ * for desks, locker for lockers, parking for stalls) — setDragImage needs a rendered element,
+ * so a throwaway chip is appended off-screen and removed on the next tick.
+ */
+function setTypeDragImage(e: ReactDragEvent, unit: Unit) {
+  const glyph = DRAG_GLYPH[unit.type];
+  if (!glyph) return;
+  const ghost = document.createElement('div');
+  ghost.style.cssText =
+    'position:fixed;top:-200px;left:-200px;width:42px;height:42px;border-radius:50%;background:#fff;' +
+    `border:2px solid ${glyph.color};display:flex;align-items:center;justify-content:center;box-shadow:0 4px 10px rgba(16,24,40,0.18);`;
+  ghost.innerHTML = `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="${glyph.color}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${glyph.svg}</svg>`;
+  document.body.appendChild(ghost);
+  e.dataTransfer.setDragImage(ghost, 21, 21);
+  setTimeout(() => ghost.remove(), 0);
+}
+
 export function SpacesList() {
   const { state, actions } = useFloorplan();
-  const units = state.units;
+  const isEdit = state.mode === 'edit';
+  // Edit mode is about PLACING: only the non-marked (unplaced) records are available in the
+  // list — everything already placed is visible (and draggable) on the canvas itself.
+  const units = isEdit ? state.unplacedUnits : state.units;
 
   const counts: Record<string, number> = { all: units.length };
   for (const u of units) counts[u.type] = (counts[u.type] || 0) + 1;
@@ -34,7 +63,7 @@ export function SpacesList() {
     <div className={styles.wrap}>
       <div className={styles.head}>
         <div className={styles.headRow}>
-          <span className={styles.title}>Spaces on this floor</span>
+          <span className={styles.title}>{isEdit ? 'Available to place' : 'Spaces on this floor'}</span>
           <span className={styles.total}>{units.length}</span>
         </div>
         <div className={styles.searchBox}>
@@ -46,7 +75,7 @@ export function SpacesList() {
             className={styles.searchInput}
             value={state.spaceSearch}
             onChange={(e) => actions.setSpaceSearch(e.target.value)}
-            placeholder="Search this floor"
+            placeholder={isEdit ? 'Search available spaces' : 'Search this floor'}
           />
           {state.spaceSearch && (
             <button className={styles.clearBtn} title="Clear" onClick={() => actions.setSpaceSearch('')}>
@@ -70,20 +99,15 @@ export function SpacesList() {
         ) : (
           <>
             {filtered.map((u) => (
-              <SpaceRow key={u.id} unit={u} />
+              <SpaceRow key={u.id} unit={u} unplaced={isEdit} />
             ))}
-            {filtered.length === 0 && <div className={styles.empty}>No spaces match this filter.</div>}
-          </>
-        )}
-        {state.mode === 'edit' && state.unplacedUnits.length > 0 && (
-          <>
-            <div className={styles.headRow} style={{ marginTop: 10, padding: '0 2px' }}>
-              <span className={styles.title}>Unplaced</span>
-              <span className={styles.total}>{state.unplacedUnits.length}</span>
-            </div>
-            {state.unplacedUnits.map((u) => (
-              <SpaceRow key={u.id} unit={u} unplaced />
-            ))}
+            {filtered.length === 0 && (
+              <div className={styles.empty}>
+                {isEdit
+                  ? 'No unplaced spaces — deleting a placed marker moves its record here, or create new ones from the map dialog.'
+                  : 'No spaces match this filter.'}
+              </div>
+            )}
           </>
         )}
       </div>
@@ -101,19 +125,20 @@ function SpaceRow({ unit, unplaced }: { unit: Unit; unplaced?: boolean }) {
     parking: 'var(--ink-600)',
     amenity: 'var(--ink-500)',
   };
-  // In edit mode, desk/locker/parking rows can be dragged onto the canvas: an unplaced record
-  // gets placed at the drop point, a placed one is repositioned (see Canvas onDrop).
-  const draggable = state.mode === 'edit' && unit.type !== 'room';
+  // Only the unplaced records drag onto the canvas (edit mode); placed markers are moved on the
+  // canvas itself. The drag ghost is the type logo, not the row (see setTypeDragImage).
+  const draggable = !!unplaced && unit.type !== 'room';
   return (
     <div
       className={styles.row}
-      style={unplaced ? { opacity: 0.75, borderStyle: 'dashed' } : undefined}
+      style={unplaced ? { borderStyle: 'dashed' } : undefined}
       draggable={draggable}
       onDragStart={
         draggable
           ? (e) => {
               e.dataTransfer.setData('application/x-floorplan-unit', unit.id);
               e.dataTransfer.effectAllowed = 'move';
+              setTypeDragImage(e, unit);
             }
           : undefined
       }
