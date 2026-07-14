@@ -44,6 +44,17 @@ export function Canvas() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.floorId, state.planId]);
 
+  // Panels float OVER the canvas, so opening/closing one never fires the
+  // ResizeObserver — re-fit explicitly so the plan re-centers in the visible
+  // gap (fitView accounts for panel insets) unless the user has taken over.
+  useEffect(() => {
+    const el = wrapRef.current;
+    if (!el || userZoomedRef.current) return;
+    const r = el.getBoundingClientRect();
+    if (r.width > 20) actions.fitView(r.width, r.height);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.panels.portfolio.open, state.panels.details.open]);
+
   useEffect(() => {
     const el = wrapRef.current;
     if (!el) return;

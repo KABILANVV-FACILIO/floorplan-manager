@@ -26,6 +26,21 @@ const FloorplanCtx = createContext<Ctx | null>(null);
 let toastTimer: ReturnType<typeof setTimeout> | undefined;
 
 /**
+ * Overlay chrome the auto-fit must clear so plan content never hides under
+ * the floating panels — same widths MapStage uses for its layout padding
+ * (portfolio 320 / details 336 when open, 76 for their collapsed rails),
+ * plus headroom for the mode switcher (top) and the bottom nav.
+ */
+function viewInsets(state: AppState) {
+  return {
+    left: state.panels.portfolio.open ? 336 : 76,
+    right: state.panels.details.open ? 352 : 76,
+    top: 64,
+    bottom: 84,
+  };
+}
+
+/**
  * Explicit-save chokepoint ONLY — local per-action edits (place/update/delete/close-draft) call
  * `dataSource.saveUnits` directly and stop there; this additionally pushes real
  * `floorplanmarker`/`indoorfloorplan` sync, and is deliberately reserved for "Save changes" /
@@ -204,7 +219,7 @@ function buildActions(state: AppState, dispatch: Dispatch<Action>, canvasRectRef
 
     fitView: (rectW: number, rectH: number) => {
       dispatch({ type: 'MARK_USER_ZOOMED', value: false });
-      dispatch({ type: 'SET_VIEW', view: fitViewFn(rectW, rectH) });
+      dispatch({ type: 'SET_VIEW', view: fitViewFn(rectW, rectH, viewInsets(state)) });
     },
     zoomIn: (rectW: number, rectH: number) => {
       dispatch({ type: 'MARK_USER_ZOOMED', value: true });
@@ -224,7 +239,7 @@ function buildActions(state: AppState, dispatch: Dispatch<Action>, canvasRectRef
       const u = unitById(state, id);
       if (!u) return;
       if (u.plan !== state.planId) dispatch({ type: 'SET_PLAN', planId: u.plan });
-      const view = focusUnitView(u, rectW, rectH, state.view.z);
+      const view = focusUnitView(u, rectW, rectH, state.view.z, viewInsets(state));
       dispatch({ type: 'SET_VIEW', view, animate: true });
       dispatch({ type: 'MARK_USER_ZOOMED', value: true });
       if (opts?.select !== false) dispatch({ type: 'SELECT_UNIT', id });
@@ -251,7 +266,7 @@ function buildActions(state: AppState, dispatch: Dispatch<Action>, canvasRectRef
       const u = geoId ? units.find((x) => x.id === geoId) : null;
       if (u) {
         if (u.plan !== state.planId) dispatch({ type: 'SET_PLAN', planId: u.plan });
-        const view = focusUnitView(u, rectW, rectH, state.view.z);
+        const view = focusUnitView(u, rectW, rectH, state.view.z, viewInsets(state));
         dispatch({ type: 'SET_VIEW', view, animate: true });
         dispatch({ type: 'MARK_USER_ZOOMED', value: true });
         dispatch({ type: 'HIGHLIGHT_UNIT', id: u.id });

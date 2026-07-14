@@ -7,9 +7,23 @@ export interface ViewTransform {
   z: number;
 }
 
-export function fitView(rectW: number, rectH: number): ViewTransform {
-  const z = Math.min(rectW / IMG_W, rectH / IMG_H) * 0.96;
-  return { z, tx: (rectW - IMG_W * z) / 2, ty: (rectH - IMG_H * z) / 2 };
+/** Overlay chrome (floating panels, mode switcher, bottom nav) eating into the stage. */
+export interface ViewInsets {
+  left: number;
+  right: number;
+  top: number;
+  bottom: number;
+}
+
+export function fitView(rectW: number, rectH: number, insets?: Partial<ViewInsets>): ViewTransform {
+  const l = insets?.left ?? 0;
+  const r = insets?.right ?? 0;
+  const t = insets?.top ?? 0;
+  const b = insets?.bottom ?? 0;
+  const availW = Math.max(120, rectW - l - r);
+  const availH = Math.max(120, rectH - t - b);
+  const z = Math.min(availW / IMG_W, availH / IMG_H) * 0.96;
+  return { z, tx: l + (availW - IMG_W * z) / 2, ty: t + (availH - IMG_H * z) / 2 };
 }
 
 export function zoomAt(view: ViewTransform, factor: number, cx: number, cy: number): ViewTransform {
@@ -43,15 +57,27 @@ export function unitCenter(u: Pick<Unit, 'geom'>): { cx: number; cy: number; spa
 }
 
 /** View transform that centers+zooms on a unit, per the original focusUnit() formula. */
-export function focusUnitView(u: Pick<Unit, 'geom'>, rectW: number, rectH: number, currentZ: number): ViewTransform {
+export function focusUnitView(
+  u: Pick<Unit, 'geom'>,
+  rectW: number,
+  rectH: number,
+  currentZ: number,
+  insets?: Partial<ViewInsets>,
+): ViewTransform {
   const { cx, cy, span } = unitCenter(u);
+  const l = insets?.left ?? 0;
+  const r = insets?.right ?? 0;
+  const t = insets?.top ?? 0;
+  const b = insets?.bottom ?? 0;
+  const centerX = l + (rectW - l - r) / 2;
+  const centerY = t + (rectH - t - b) / 2;
   let z: number;
   if (u.geom.kind === 'point') {
     z = clamp(Math.max(currentZ, 1.25), 1.25, 2.4);
   } else {
     z = clamp(Math.min(2.4, (Math.min(rectW, rectH) * 0.7) / (span * IMG_W)), 0.6, 2.4);
   }
-  return { z, tx: rectW / 2 - cx * IMG_W * z, ty: rectH / 2 - cy * IMG_H * z };
+  return { z, tx: centerX - cx * IMG_W * z, ty: centerY - cy * IMG_H * z };
 }
 
 export function clipPathFor(geom: PolyGeom): string {
