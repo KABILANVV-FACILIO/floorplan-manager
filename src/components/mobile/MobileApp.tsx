@@ -1,15 +1,16 @@
 import { useEffect, useRef, useState } from 'react';
 import { useFloorplan } from '../../state/FloorplanContext';
 import { floorMeta } from '../../state/selectors';
-import { fitView, fmtTime, zoomAt } from '../../lib/geometry';
+import { fitView, fmtTime, polygonCentroid, zoomAt } from '../../lib/geometry';
 import type { ViewTransform } from '../../lib/geometry';
 import { IMG_H, IMG_W } from '../../lib/mockData';
 import { FloorplanBackground } from '../canvas/FloorplanBackground';
 import { MobileFloorPicker } from './MobileFloorPicker';
 import { MobileUnitSheet } from './MobileUnitSheet';
 import { MobileTimePicker } from './MobileTimePicker';
+import { MobileQrScanner } from './MobileQrScanner';
 import { unitStatus } from '../../lib/unitStatus';
-import { employeeName, myAssignedUnit } from '../../state/selectors';
+import { employeeName, initials, myAssignedUnit } from '../../state/selectors';
 import { floorImageKey } from '../../lib/types';
 import type { Unit } from '../../lib/types';
 import styles from './MobileApp.module.css';
@@ -24,6 +25,7 @@ export function MobileApp({ mode, onClose }: MobileAppProps) {
   const meta = floorMeta(state, state.floorId);
   const hasPlan = !!meta?.floor.hasPlan;
   const myUnit = myAssignedUnit(state);
+  const [qrOpen, setQrOpen] = useState(false);
 
   const rooms = state.units.filter((u) => u.type === 'room' && u.geom.kind === 'poly');
   const markers = state.units.filter((u) => u.type !== 'room' && u.geom.kind === 'point');
@@ -92,6 +94,14 @@ export function MobileApp({ mode, onClose }: MobileAppProps) {
               ) : (
                 <span className={styles.dateStatic}>{new Date(state.date).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}</span>
               )}
+              <button className={styles.qrBtn} onClick={() => setQrOpen(true)} title="Scan a space QR" aria-label="Scan a space QR">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="3" y="3" width="7" height="7" rx="1" />
+                  <rect x="14" y="3" width="7" height="7" rx="1" />
+                  <rect x="3" y="14" width="7" height="7" rx="1" />
+                  <path d="M14 14h3v3M21 14v7h-7" />
+                </svg>
+              </button>
             </div>
 
             <div className={styles.tabs}>
@@ -137,6 +147,7 @@ export function MobileApp({ mode, onClose }: MobileAppProps) {
           <MobileTimePicker />
           <MobileFloorPicker />
           <MobileUnitSheet />
+          {qrOpen && <MobileQrScanner onClose={() => setQrOpen(false)} />}
         </div>
       </div>
     </div>
@@ -288,32 +299,78 @@ function MobileMap({ rooms, markers, legend }: { rooms: Unit[]; markers: Unit[];
       >
         <FloorplanBackground imageUrl={state.floorImages[floorImageKey(state.floorId, state.planId)]} />
         <svg style={{ position: 'absolute', inset: 0 }} width={IMG_W} height={IMG_H} viewBox={`0 0 ${IMG_W} ${IMG_H}`}>
-          {rooms.map((r) =>
-            r.geom.kind === 'poly' ? (
-              <polygon
-                key={r.id}
-                points={r.geom.pts.map(([x, y]) => `${x * IMG_W},${y * IMG_H}`).join(' ')}
-                fill={roomFill(state.mode, state.bookings, r.id, state.date, state.start, state.end)}
-              />
-            ) : null
-          )}
+          {rooms.map((r) => {
+            if (r.geom.kind !== 'poly') return null;
+            const c = polygonCentroid(r.geom.pts);
+            const scale = Math.min(invZ, 3.5);
+            const selected = state.mobSel === r.id;
+            return (
+              <g key={r.id}>
+                <polygon
+                  points={r.geom.pts.map(([x, y]) => `${x * IMG_W},${y * IMG_H}`).join(' ')}
+                  fill={roomFill(state.mode, state.bookings, r.id, state.date, state.start, state.end)}
+                  stroke={selected ? 'var(--blue-600)' : 'rgba(96,119,150,0.5)'}
+                  strokeWidth={(selected ? 3 : 1.5) * scale}
+                  style={{ cursor: 'pointer' }}
+                  onClick={() => actions.setMobSel(r.id)}
+                />
+                {/* room name at the centroid — halo keeps it readable over plan linework */}
+                <text
+                  x={c.x * IMG_W}
+                  y={c.y * IMG_H}
+                  textAnchor="middle"
+                  dominantBaseline="middle"
+                  fontSize={13 * scale}
+                  fontWeight={600}
+                  fill="var(--ink-700)"
+                  stroke="#fff"
+                  strokeWidth={3.5 * scale}
+                  paintOrder="stroke"
+                  style={{ pointerEvents: 'none', fontFamily: 'var(--font-sans)' }}
+                >
+                  {r.label}
+                </text>
+              </g>
+            );
+          })}
         </svg>
-        {markers.map((m) =>
-          m.geom.kind === 'point' ? (
+        {markers.map((m) => {
+          if (m.geom.kind !== 'point') return null;
+          const selected = state.mobSel === m.id;
+          const empId = state.assignments[m.id];
+          const emp = empId ? employeeName(state, empId) : null;
+          // labels appear once zoomed in enough to not collide; the selected pin always shows
+          const showLabel = v.z >= 0.5 || selected;
+          return (
             <button
               key={m.id}
-              className={styles.dot}
+              className={styles.marker}
               style={{
                 left: `${m.geom.x * 100}%`,
                 top: `${m.geom.y * 100}%`,
-                background: dotColorFor(state, m, (id) => employeeName(state, id)),
-                boxShadow: state.mobSel === m.id ? '0 0 0 4px rgba(0,89,214,0.35)' : '0 0 0 2px #fff',
                 transform: `translate(-50%, -50%) scale(${Math.min(invZ, 3.5)})`,
+                zIndex: selected ? 3 : showLabel ? 2 : 1,
               }}
               onClick={() => actions.setMobSel(m.id)}
-            />
-          ) : null
-        )}
+            >
+              <span
+                className={styles.markerDot}
+                style={{
+                  background: dotColorFor(state, m, (id) => employeeName(state, id)),
+                  boxShadow: selected ? '0 0 0 3px rgba(0,89,214,0.35)' : '0 0 0 1.5px #fff',
+                }}
+              >
+                {emp ? initials(emp) : ''}
+              </span>
+              {showLabel && (
+                <span className={styles.markerLabel}>
+                  {m.label}
+                  {emp ? ` · ${emp.split(' ')[0]}` : ''}
+                </span>
+              )}
+            </button>
+          );
+        })}
       </div>
 
       <span className={styles.countPill}>{markers.length} spaces · tap a pin</span>
