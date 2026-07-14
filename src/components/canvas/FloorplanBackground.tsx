@@ -25,7 +25,20 @@ export function FloorplanBackground({ imageUrl }: { imageUrl?: string }) {
       <img
         src={imageUrl}
         draggable={false}
-        style={{ position: 'absolute', left: 0, top: 0, width: IMG_W, height: IMG_H, boxShadow: 'var(--shadow-md)', pointerEvents: 'none', objectFit: 'cover' }}
+        // contain, not cover: uploads rarely match the frame's 1492×1054
+        // aspect, and cover silently crops the overflow (a squarer plan lost
+        // its top and bottom). Letterbox on white instead — nothing is cut.
+        style={{
+          position: 'absolute',
+          left: 0,
+          top: 0,
+          width: IMG_W,
+          height: IMG_H,
+          boxShadow: 'var(--shadow-md)',
+          pointerEvents: 'none',
+          objectFit: 'contain',
+          background: '#fff',
+        }}
       />
     );
   }
