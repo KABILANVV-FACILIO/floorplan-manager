@@ -1,6 +1,13 @@
 import { IMG_H, IMG_W } from '../../lib/mockData';
 import { isFacilioApiConfigured } from '../../lib/facilioApi';
 
+// The made-up architectural schematic below is a LOCAL-PROTOTYPE-ONLY fallback. In the deployed
+// app (VITE_DEV_MODE=false) there's no real @facilio/api, so `isFacilioApiConfigured` is false —
+// which used to fall straight through to the schematic and paint a fake floorplan under real
+// markers on every refresh/switch. Gate on dev mode too so the deployed app shows a blank sheet
+// (and the shimmer covers loading), never the dummy.
+const isDevMode = import.meta.env.VITE_DEV_MODE === 'true';
+
 /**
  * The original prototype used a rendered raster floorplan image as a static background.
  * That asset isn't available to this rebuild, so this draws a clean, resolution-independent
@@ -22,7 +29,8 @@ export function FloorplanBackground({ imageUrl }: { imageUrl?: string }) {
       />
     );
   }
-  if (isFacilioApiConfigured) {
+  // Real backend OR deployed app: a missing image is a blank sheet, never the mock schematic.
+  if (isFacilioApiConfigured || !isDevMode) {
     return (
       <div
         style={{ position: 'absolute', left: 0, top: 0, width: IMG_W, height: IMG_H, background: '#fff', boxShadow: 'var(--shadow-md)', pointerEvents: 'none' }}

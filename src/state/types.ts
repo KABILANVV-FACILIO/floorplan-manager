@@ -34,9 +34,22 @@ export interface AppState {
   spaceSearch: string;
 
   units: Unit[];
+  /**
+   * Desk/locker/parking records that exist but aren't placed on the plan: deleting a placed
+   * marker moves its record here (the desk itself isn't destroyed), and the edit-mode map
+   * dialog / sidebar drag place them back. In-memory only for now — a refresh rebuilds it empty.
+   */
+  unplacedUnits: Unit[];
+  /** A click-to-place spot awaiting the "which desk goes here?" map dialog (edit mode). */
+  pendingPlacement: { type: 'workstation' | 'locker' | 'parking'; x: number; y: number } | null;
   /** Snapshot of `units` as of the last explicit save (floor load, "Save changes", or a resolved discard) — the revert target for "Discard changes". */
   savedUnits: Unit[];
-  /** Count of unit edits (place/update/delete) since the last save — drives the floating "N unsaved changes" bar and the save/discard prompt on mode switch. */
+  /**
+   * DISTINCT unsaved changes since the last save, derived by diffing `units` vs `savedUnits`
+   * (see countUnsavedChanges): per unit — any module type — a geometry move counts once no
+   * matter how many drags, a value edit counts once more, adds/deletes one each. Drives the
+   * floating "N unsaved changes" bar and the save/discard prompt on mode switch.
+   */
   unsavedChanges: number;
   /** Mode the user tried to switch to while there were unsaved edit changes — set while the save/discard confirmation is open. */
   pendingModeSwitch: AppMode | null;

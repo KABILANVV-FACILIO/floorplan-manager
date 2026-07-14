@@ -7,6 +7,9 @@ import type { Booking, PlanId, Role, Site, Unit, UnitType } from '../lib/types';
 import type { CadGroup } from '../lib/cadAnalyze';
 import { isFacilioApiConfigured } from '../lib/facilioApi';
 import { assignUnitReal, createRealBooking, fetchFloorplanImage, fetchMyDesk, findUnitIdForDeskRecord, getFloorPlanSummary, saveFloorplanMarkers, vacateUnitReal } from '../lib/facilioApiDataSource';
+import { loadFloorplanFile, persistFloorplanFile } from '../lib/floorplanFileStore';
+import { loadSettings, saveSettings, settingsFromState } from '../lib/settingsStore';
+import { hashForView, viewFromHash } from '../lib/routes';
 import { buildInitialState, reducer } from './reducer';
 import type { Action } from './reducer';
 import type { AppState } from './types';
@@ -59,18 +62,24 @@ function firstFloorId(portfolio: Site[]): string | undefined {
  * if the current selection isn't among them, then loads that plan's real image.
  */
 async function loadFloorPlanTypesAndImage(dispatch: Dispatch<Action>, floorId: string, currentPlanId: PlanId) {
-  if (!isFacilioApiConfigured) return;
   dispatch({ type: 'SET_FLOOR_IMAGE_LOADING', value: true });
   try {
-    const types = await getFloorPlanSummary(floorId).catch(() => []);
-    dispatch({ type: 'SET_FLOOR_PLAN_TYPES', floorId, types });
-    if (!types.length) return;
+    if (isFacilioApiConfigured) {
+      const types = await getFloorPlanSummary(floorId).catch(() => []);
+      dispatch({ type: 'SET_FLOOR_PLAN_TYPES', floorId, types });
+      if (!types.length) return;
 
-    const resolvedPlanId = types.some((t) => t.id === currentPlanId) ? currentPlanId : types[0].id;
-    if (resolvedPlanId !== currentPlanId) dispatch({ type: 'SET_PLAN', planId: resolvedPlanId });
+      const resolvedPlanId = types.some((t) => t.id === currentPlanId) ? currentPlanId : types[0].id;
+      if (resolvedPlanId !== currentPlanId) dispatch({ type: 'SET_PLAN', planId: resolvedPlanId });
 
-    const imageUrl = await fetchFloorplanImage(floorId, resolvedPlanId).catch(() => null);
-    if (imageUrl) dispatch({ type: 'SET_FLOOR_IMAGE', floorId, planId: resolvedPlanId, dataUrl: imageUrl });
+      const imageUrl = await fetchFloorplanImage(floorId, resolvedPlanId).catch(() => null);
+      if (imageUrl) dispatch({ type: 'SET_FLOOR_IMAGE', floorId, planId: resolvedPlanId, dataUrl: imageUrl });
+    } else {
+      // Deployed (no @facilio/api): reload the upload we persisted for this plan to the Vibe DB,
+      // so a refresh doesn't lose the floorplan. Falls back silently to the empty state if none.
+      const stored = await loadFloorplanFile(floorId, currentPlanId).catch(() => null);
+      if (stored?.dataUrl) dispatch({ type: 'SET_FLOOR_IMAGE', floorId, planId: currentPlanId, dataUrl: stored.dataUrl });
+    }
   } finally {
     dispatch({ type: 'SET_FLOOR_IMAGE_LOADING', value: false });
   }
@@ -84,11 +93,22 @@ async function loadFloorPlanTypesAndImage(dispatch: Dispatch<Action>, floorId: s
 async function ensureFloorplanImage(dispatch: Dispatch<Action>, floorId: string, planId: PlanId) {
   dispatch({ type: 'SET_FLOOR_IMAGE_LOADING', value: true });
   try {
-    const imageUrl = await fetchFloorplanImage(floorId, planId).catch(() => null);
+    let imageUrl = isFacilioApiConfigured ? await fetchFloorplanImage(floorId, planId).catch(() => null) : null;
+    if (!imageUrl) {
+      // Deployed / no real backend for this plan: fall back to the Vibe DB copy (no-op in dev).
+      const stored = await loadFloorplanFile(floorId, planId).catch(() => null);
+      imageUrl = stored?.dataUrl ?? null;
+    }
     if (imageUrl) dispatch({ type: 'SET_FLOOR_IMAGE', floorId, planId, dataUrl: imageUrl });
   } finally {
     dispatch({ type: 'SET_FLOOR_IMAGE_LOADING', value: false });
   }
+}
+
+/** The room polygon (if any) containing an image-fraction point — placed units inherit its label. */
+function roomLabelAt(state: AppState, x: number, y: number): string | null {
+  const room = state.units.find((u) => u.type === 'room' && u.geom.kind === 'poly' && pointInPoly({ x, y }, u.geom.pts));
+  return room ? room.label : null;
 }
 
 function buildActions(state: AppState, dispatch: Dispatch<Action>, canvasRectRef: MutableRefObject<DOMRect | null>) {
@@ -103,7 +123,7 @@ function buildActions(state: AppState, dispatch: Dispatch<Action>, canvasRectRef
     // Flag the image load NOW, not when loadFloorPlanTypesAndImage eventually starts — the
     // units/assignments/bookings awaits below leave a gap where the stage would otherwise flash
     // a blank canvas before the skeleton appears. Its finally-block still clears the flag.
-    if (isFacilioApiConfigured) dispatch({ type: 'SET_FLOOR_IMAGE_LOADING', value: true });
+    dispatch({ type: 'SET_FLOOR_IMAGE_LOADING', value: true });
     const [units, assignments, bookings] = await Promise.all([
       dataSource.getUnits(floorId),
       dataSource.getAssignments(floorId),
@@ -175,7 +195,7 @@ function buildActions(state: AppState, dispatch: Dispatch<Action>, canvasRectRef
       // Switching to a plan type whose image hasn't been fetched yet on this floor (the common
       // case — loadFloorPlanTypesAndImage only auto-fetches whichever type it resolves to on
       // floor load) needs its own fetch, not just the state flip.
-      if (isFacilioApiConfigured && !state.floorImages[floorImageKey(state.floorId, planId)]) {
+      if (!state.floorImages[floorImageKey(state.floorId, planId)]) {
         ensureFloorplanImage(dispatch, state.floorId, planId);
       }
     },
@@ -247,24 +267,64 @@ function buildActions(state: AppState, dispatch: Dispatch<Action>, canvasRectRef
 
     selectUnit: (id: string | null) => dispatch({ type: 'SELECT_UNIT', id }),
 
+    /**
+     * Clicking a spot with a desk/locker/parking tool no longer silently mints a new record —
+     * it opens the map dialog ("which desk goes here?") offering the unplaced pool, with
+     * creating a fresh record as the explicit alternative (confirmPlacementCreate below).
+     */
     placePoint: (type: 'workstation' | 'locker' | 'parking', x: number, y: number) => {
-      const rooms = state.units.filter((u) => u.type === 'room');
-      const room = rooms.find((r) => r.geom.kind === 'poly' && pointInPoly({ x, y }, r.geom.pts));
-      const prefix = TYPE_META[type].prefix;
-      const label = nextLabel(state, type, prefix);
+      dispatch({ type: 'SET_PENDING_PLACEMENT', placement: { type, x, y } });
+    },
+    cancelPlacement: () => dispatch({ type: 'SET_PENDING_PLACEMENT', placement: null }),
+    /** Map dialog: place an EXISTING unplaced record at the pending spot. */
+    confirmPlacementExisting: (unitId: string) => {
+      const spot = state.pendingPlacement;
+      const pooled = state.unplacedUnits.find((u) => u.id === unitId);
+      if (!spot || !pooled) return;
+      const room = roomLabelAt(state, spot.x, spot.y);
+      dispatch({ type: 'PLACE_EXISTING_UNIT', unitId, geom: { kind: 'point', x: spot.x, y: spot.y }, room });
+      dataSource.saveUnits(state.floorId, [...state.units, { ...pooled, geom: { kind: 'point', x: spot.x, y: spot.y }, room, floor: state.floorId }]);
+      showToast(`${pooled.label} placed`);
+    },
+    /** Map dialog: explicitly create a NEW auto-numbered record at the pending spot. */
+    confirmPlacementCreate: () => {
+      const spot = state.pendingPlacement;
+      if (!spot) return;
+      const { type, x, y } = spot;
+      const label = nextLabel(state, type, TYPE_META[type].prefix);
       const unit: Unit = {
         id: 'u' + Date.now(),
         type,
         label,
         secondary: type === 'workstation' ? 'Standard · single monitor' : undefined,
-        room: room ? room.label : null,
+        room: roomLabelAt(state, x, y),
         geom: { kind: 'point', x, y },
         floor: state.floorId,
         plan: type,
       };
       dispatch({ type: 'ADD_UNIT', unit });
+      dispatch({ type: 'SET_PENDING_PLACEMENT', placement: null });
       dataSource.saveUnits(state.floorId, [...state.units, unit]);
       showToast(`${label} added`);
+    },
+    /**
+     * Sidebar drag-drop: the dragged row names the exact desk, so no dialog — an unplaced
+     * record gets placed at the drop point; an already-placed one is repositioned there.
+     */
+    placeUnitAt: (unitId: string, x: number, y: number) => {
+      const room = roomLabelAt(state, x, y);
+      const pooled = state.unplacedUnits.find((u) => u.id === unitId);
+      if (pooled) {
+        dispatch({ type: 'PLACE_EXISTING_UNIT', unitId, geom: { kind: 'point', x, y }, room });
+        dataSource.saveUnits(state.floorId, [...state.units, { ...pooled, geom: { kind: 'point', x, y }, room, floor: state.floorId }]);
+        showToast(`${pooled.label} placed`);
+        return;
+      }
+      const placed = state.units.find((u) => u.id === unitId);
+      if (!placed || placed.geom.kind !== 'point') return;
+      dispatch({ type: 'UPDATE_UNIT', id: unitId, patch: { geom: { kind: 'point', x, y }, room } });
+      dataSource.saveUnits(state.floorId, state.units.map((u) => (u.id === unitId ? { ...u, geom: { kind: 'point', x, y }, room } : u)));
+      showToast(`${placed.label} moved`);
     },
     pushDraftPoint: (pt: [number, number]) => dispatch({ type: 'PUSH_DRAFT_POINT', pt }),
     closeDraft: () => {
@@ -513,6 +573,8 @@ function buildActions(state: AppState, dispatch: Dispatch<Action>, canvasRectRef
       }
 
       // --- LOCAL-BOOKING-FALLBACK (remove once real modules are the source of truth) ---
+      // Persist EVERY form field to the vibe-db (not just the calendar summary): the handler
+      // stores whatever object it's given, so the full booking survives reload/refresh.
       const local: Booking = {
         id: 'b' + Date.now(),
         unitId: form.unitId,
@@ -521,6 +583,14 @@ function buildActions(state: AppState, dispatch: Dispatch<Action>, canvasRectRef
         end: form.end,
         by: form.reservedBy || form.host || state.bookBy,
         purpose: form.name,
+        module: state.bookingModule,
+        name: form.name,
+        description: form.description,
+        host: form.host,
+        reservedBy: form.reservedBy,
+        noOfAttendees: form.noOfAttendees,
+        internalAttendees: form.internalAttendees,
+        externalAttendees: form.externalAttendees,
       };
       const saved = await dataSource.createBooking(local);
       dispatch({ type: 'ADD_BOOKING', booking: saved });
@@ -644,7 +714,12 @@ function buildActions(state: AppState, dispatch: Dispatch<Action>, canvasRectRef
     setMobAssignEdit: (value: boolean) => dispatch({ type: 'SET_MOB_ASSIGN_EDIT', value }),
 
     setUploadOpen: (open: boolean) => dispatch({ type: 'SET_UPLOAD_OPEN', open }),
-    setFloorImage: (floorId: string, planId: PlanId, dataUrl: string) => dispatch({ type: 'SET_FLOOR_IMAGE', floorId, planId, dataUrl }),
+    setFloorImage: (floorId: string, planId: PlanId, dataUrl: string) => {
+      dispatch({ type: 'SET_FLOOR_IMAGE', floorId, planId, dataUrl });
+      // Persist the uploaded floorplan so a deployed app reloads it after a refresh. Best-effort
+      // and a no-op in dev (where the real @facilio/api indoorfloorplan record already holds it).
+      void persistFloorplanFile(floorId, planId, { dataUrl });
+    },
 
     resetDemo: () => {
       const units = seedUnits();
@@ -676,6 +751,47 @@ export function FloorplanProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(reducer, undefined, buildInitialState);
   const canvasRectRef = useRef<DOMRect | null>(null);
   const loadedRef = useRef(false);
+  const settingsLoadedRef = useRef(false);
+  const saveTimer = useRef<ReturnType<typeof setTimeout>>();
+
+  // Hash-route sync (see lib/routes.ts): state.activeView is the source of truth, mirrored to
+  // the URL hash so each bottom-nav view is a real route. Nav clicks push a history entry;
+  // back/forward (and hand-edited hashes) come back in via hashchange. The reducer's
+  // SET_ACTIVE_VIEW is idempotent, so the two directions can't loop.
+  useEffect(() => {
+    if (viewFromHash(window.location.hash) !== state.activeView) {
+      window.location.hash = hashForView(state.activeView);
+    }
+  }, [state.activeView]);
+  useEffect(() => {
+    const onHashChange = () => dispatch({ type: 'SET_ACTIVE_VIEW', view: viewFromHash(window.location.hash) });
+    window.addEventListener('hashchange', onHashChange);
+    return () => window.removeEventListener('hashchange', onHashChange);
+  }, []);
+
+  // Load persisted settings (vibe-db when deployed, else localStorage) once on mount.
+  useEffect(() => {
+    loadSettings()
+      .then((cfg) => {
+        if (cfg) dispatch({ type: 'APPLY_SETTINGS', config: cfg });
+      })
+      .finally(() => {
+        settingsLoadedRef.current = true;
+      });
+  }, []);
+
+  // Persist settings (as one JSON string) whenever a config slice changes — debounced so a
+  // color-picker drag or rapid toggles collapse into a single write. Skipped until the initial
+  // load has run, so we never clobber stored config with defaults before it arrives.
+  useEffect(() => {
+    if (!settingsLoadedRef.current) return;
+    clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => {
+      void saveSettings(settingsFromState(state));
+    }, 500);
+    return () => clearTimeout(saveTimer.current);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.perms, state.moduleColors, state.slotGranularity, state.bookingModule]);
 
   useEffect(() => {
     if (loadedRef.current) return;

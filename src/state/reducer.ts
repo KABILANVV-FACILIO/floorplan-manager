@@ -2,11 +2,39 @@ import { DEFAULT_PERMS, floorImageKey } from '../lib/types';
 import type { Booking, PlanId, Site, Unit } from '../lib/types';
 import { clamp, fitView } from '../lib/geometry';
 import { seedBookings } from '../lib/mockData';
+import { viewFromHash } from '../lib/routes';
 import type { AppState } from './types';
 
 function todayIso(): string {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+/**
+ * Distinct unsaved changes, DERIVED by diffing against the last save instead of incrementing a
+ * counter per action — for every module type (desks, lockers, parking, rooms alike): dragging
+ * the same unit five times is ONE change (its geometry differs from the saved copy), editing
+ * its value fields (label/type/room/...) is ONE more, and each add or delete is one. Derived
+ * counting also means dragging a unit back exactly where it started costs nothing — the diff
+ * is empty again.
+ */
+function countUnsavedChanges(units: Unit[], savedUnits: Unit[]): number {
+  const savedById = new Map(savedUnits.map((u) => [u.id, u]));
+  const liveIds = new Set(units.map((u) => u.id));
+  let count = 0;
+  for (const u of units) {
+    const saved = savedById.get(u.id);
+    if (!saved) {
+      count += 1; // newly placed — its position/edits are all part of that one change
+      continue;
+    }
+    if (JSON.stringify(u.geom) !== JSON.stringify(saved.geom)) count += 1; // moved, however many times
+    const { geom: _g, ...rest } = u;
+    const { geom: _sg, ...savedRest } = saved;
+    if (JSON.stringify(rest) !== JSON.stringify(savedRest)) count += 1; // value edits, as one more
+  }
+  for (const s of savedUnits) if (!liveIds.has(s.id)) count += 1; // deleted
+  return count;
 }
 
 export function buildInitialState(): AppState {
@@ -32,6 +60,8 @@ export function buildInitialState(): AppState {
     spaceSearch: '',
 
     units: [],
+    unplacedUnits: [],
+    pendingPlacement: null,
     savedUnits: [],
     unsavedChanges: 0,
     pendingModeSwitch: null,
@@ -68,7 +98,9 @@ export function buildInitialState(): AppState {
     role: 'admin',
     perms: { ...DEFAULT_PERMS },
 
-    activeView: 'map',
+    // Each bottom-nav view is a hash route (see lib/routes.ts) — boot straight into whatever
+    // the URL says, so a refresh/deep link on #/bookings etc. lands on that tab.
+    activeView: viewFromHash(window.location.hash),
     settingsTab: 'permissions',
     moduleColors: {},
     slotGranularity: 30,
@@ -89,7 +121,9 @@ export function buildInitialState(): AppState {
     myDesk: null,
     floorImages: {},
     floorPlanTypes: {},
-    floorImageLoading: false,
+    // Start in the loading state so a fresh load / refresh paints the shimmer immediately, not a
+    // blank/placeholder canvas. The mount-time image load clears it in its finally block.
+    floorImageLoading: true,
   };
 }
 
@@ -142,6 +176,9 @@ export type Action =
   | { type: 'TOGGLE_PERM'; action: keyof AppState['perms']; role: AppState['role'] }
   | { type: 'RESET_PERMS' }
   | { type: 'SET_ACTIVE_VIEW'; view: AppState['activeView'] }
+  | { type: 'SET_PENDING_PLACEMENT'; placement: AppState['pendingPlacement'] }
+  | { type: 'PLACE_EXISTING_UNIT'; unitId: string; geom: Unit['geom']; room: string | null }
+  | { type: 'APPLY_SETTINGS'; config: import('../lib/settingsStore').SettingsConfig }
   | { type: 'SET_SETTINGS_TAB'; tab: AppState['settingsTab'] }
   | { type: 'SET_MODULE_COLOR'; key: string; hex: string }
   | { type: 'SET_SLOT_GRANULARITY'; minutes: number }
@@ -168,7 +205,7 @@ export type Action =
   | { type: 'SET_PENDING_MODE_SWITCH'; mode: AppState['mode'] | null }
   | { type: 'RESET_DEMO'; units: Unit[]; assignments: AppState['assignments']; bookings: Booking[] };
 
-function resetSelectionState(s: AppState): Partial<AppState> {
+function resetSelectionState(_s: AppState): Partial<AppState> {
   return { selected: null, draft: [], calib: [], calibLen: '', dragOverId: null, webReassign: null };
 }
 
@@ -196,6 +233,9 @@ export function reducer(state: AppState, action: Action): AppState {
         spaceSearch: '',
         spaceFilter: 'all',
         loading: true,
+        // Switching floors: shimmer immediately (cleared once the new floor's image resolves), so
+        // the new floor's markers never briefly render over the old/blank background.
+        floorImageLoading: true,
         ...resetSelectionState(state),
       };
     case 'SELECT_FLOOR_DONE':
@@ -220,30 +260,60 @@ export function reducer(state: AppState, action: Action): AppState {
       return { ...state, selected: action.id, webReassign: null };
     case 'HIGHLIGHT_UNIT':
       return { ...state, highlightUnitId: action.id };
-    case 'ADD_UNIT':
-      return { ...state, units: [...state.units, action.unit], selected: action.unit.id, unsavedChanges: state.unsavedChanges + 1 };
-    case 'ADD_UNITS':
-      return { ...state, units: [...state.units, ...action.units], unsavedChanges: state.unsavedChanges + action.units.length };
-    case 'UPDATE_UNIT':
-      return { ...state, units: state.units.map((u) => (u.id === action.id ? { ...u, ...action.patch } : u)), unsavedChanges: state.unsavedChanges + 1 };
+    case 'ADD_UNIT': {
+      const units = [...state.units, action.unit];
+      return { ...state, units, selected: action.unit.id, unsavedChanges: countUnsavedChanges(units, state.savedUnits) };
+    }
+    case 'ADD_UNITS': {
+      const units = [...state.units, ...action.units];
+      return { ...state, units, unsavedChanges: countUnsavedChanges(units, state.savedUnits) };
+    }
+    case 'UPDATE_UNIT': {
+      const units = state.units.map((u) => (u.id === action.id ? { ...u, ...action.patch } : u));
+      return { ...state, units, unsavedChanges: countUnsavedChanges(units, state.savedUnits) };
+    }
     case 'DELETE_UNIT': {
       const assignments = { ...state.assignments };
       delete assignments[action.id];
+      const removed = state.units.find((u) => u.id === action.id);
+      const units = state.units.filter((u) => u.id !== action.id);
       return {
         ...state,
-        units: state.units.filter((u) => u.id !== action.id),
+        units,
+        // Deleting a desk/locker/parking marker un-places the record rather than destroying it —
+        // it lands in the unplaced pool, where the map dialog / sidebar drag can put it back.
+        // Rooms are pure geometry, so they delete outright.
+        unplacedUnits: removed && removed.type !== 'room' ? [...state.unplacedUnits, removed] : state.unplacedUnits,
         assignments,
         bookings: state.bookings.filter((b) => b.unitId !== action.id),
         selected: state.selected === action.id ? null : state.selected,
-        unsavedChanges: state.unsavedChanges + 1,
+        unsavedChanges: countUnsavedChanges(units, state.savedUnits),
+      };
+    }
+    case 'SET_PENDING_PLACEMENT':
+      return { ...state, pendingPlacement: action.placement };
+    case 'PLACE_EXISTING_UNIT': {
+      const pooled = state.unplacedUnits.find((u) => u.id === action.unitId);
+      if (!pooled) return state;
+      const placed: Unit = { ...pooled, geom: action.geom, room: action.room, floor: state.floorId };
+      const units = [...state.units, placed];
+      return {
+        ...state,
+        units,
+        unplacedUnits: state.unplacedUnits.filter((u) => u.id !== action.unitId),
+        selected: placed.id,
+        pendingPlacement: null,
+        unsavedChanges: countUnsavedChanges(units, state.savedUnits),
       };
     }
     case 'PUSH_DRAFT_POINT':
       return { ...state, draft: [...state.draft, action.pt] };
     case 'CLEAR_DRAFT':
       return { ...state, draft: [] };
-    case 'CLOSE_DRAFT':
-      return { ...state, units: [...state.units, action.unit], draft: [], tool: 'select', selected: action.unit.id, unsavedChanges: state.unsavedChanges + 1 };
+    case 'CLOSE_DRAFT': {
+      const units = [...state.units, action.unit];
+      return { ...state, units, draft: [], tool: 'select', selected: action.unit.id, unsavedChanges: countUnsavedChanges(units, state.savedUnits) };
+    }
     case 'PUSH_CALIB_POINT':
       return { ...state, calib: state.calib.length >= 2 ? state.calib : [...state.calib, action.pt] };
     case 'SET_CALIB_LEN':
@@ -280,6 +350,16 @@ export function reducer(state: AppState, action: Action): AppState {
       return { ...state, bookForm: state.bookForm ? { ...state.bookForm, ...action.patch } : state.bookForm };
     case 'SET_BOOKING_MODULE':
       return { ...state, bookingModule: action.module };
+    case 'APPLY_SETTINGS': {
+      const c = action.config;
+      return {
+        ...state,
+        perms: c.perms ?? state.perms,
+        moduleColors: c.moduleColors ?? state.moduleColors,
+        slotGranularity: c.slotGranularity ?? state.slotGranularity,
+        bookingModule: c.bookingModule ?? state.bookingModule,
+      };
+    }
     case 'ADD_BOOKING':
       return {
         ...state,
@@ -307,6 +387,9 @@ export function reducer(state: AppState, action: Action): AppState {
       return { ...state, perms: { ...DEFAULT_PERMS } };
 
     case 'SET_ACTIVE_VIEW':
+      // Idempotent so the hash<->state sync in FloorplanContext can dispatch freely on every
+      // hashchange without triggering render churn (or a dispatch->hash->dispatch loop).
+      if (state.activeView === action.view) return state;
       return { ...state, activeView: action.view };
     case 'SET_SETTINGS_TAB':
       return { ...state, settingsTab: action.tab };

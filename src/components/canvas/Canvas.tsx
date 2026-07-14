@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { MouseEvent as ReactMouseEvent } from 'react';
+import type { DragEvent as ReactDragEvent, MouseEvent as ReactMouseEvent } from 'react';
 import { useFloorplan } from '../../state/FloorplanContext';
 import { clamp, polyAreaM2, polygonCentroid, toNorm } from '../../lib/geometry';
 import { IMG_H, IMG_W } from '../../lib/mockData';
@@ -168,6 +168,24 @@ export function Canvas() {
     if (state.mode === 'edit' && state.tool === 'room' && state.draft.length >= 3) actions.closeDraft();
   }
 
+  // Drop target for desk rows dragged from the left sidebar (SpacesList): an unplaced record
+  // gets placed at the drop point, an already-placed one is repositioned. Edit mode only —
+  // the rows are only draggable there, but guard anyway against synthetic drops.
+  function onDragOver(e: ReactDragEvent) {
+    if (state.mode === 'edit' && e.dataTransfer.types.includes('application/x-floorplan-unit')) e.preventDefault();
+  }
+  function onDrop(e: ReactDragEvent) {
+    if (state.mode !== 'edit') return;
+    const unitId = e.dataTransfer.getData('application/x-floorplan-unit');
+    const el = wrapRef.current;
+    if (!unitId || !el) return;
+    e.preventDefault();
+    const r = el.getBoundingClientRect();
+    const n = toNorm(e.clientX, e.clientY, r, state.view);
+    if (n.x < 0 || n.x > 1 || n.y < 0 || n.y > 1) return;
+    actions.placeUnitAt(unitId, n.x, n.y);
+  }
+
   const invZ = (1 / state.view.z).toFixed(4);
   const planeTransition = state.viewAnim ? 'transform 340ms cubic-bezier(0.2,0,0,1)' : 'none';
 
@@ -187,6 +205,8 @@ export function Canvas() {
       onMouseDown={onMouseDown}
       onClick={onClick}
       onDoubleClick={onDblClick}
+      onDragOver={onDragOver}
+      onDrop={onDrop}
       className={styles.wrap}
       style={{ cursor: isDrawTool ? 'crosshair' : 'grab' }}
     >

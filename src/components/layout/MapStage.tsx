@@ -6,6 +6,7 @@ import { EmptyPlanState } from '../canvas/EmptyPlanState';
 import { FloorplanSkeleton } from '../canvas/FloorplanSkeleton';
 import { FloorUploadModal } from '../canvas/FloorUploadModal';
 import { AutoMapModal } from '../canvas/AutoMapModal';
+import { MapDeskModal } from '../canvas/MapDeskModal';
 import { UnsavedChangesModal } from '../canvas/UnsavedChangesModal';
 import { LocationPanel } from '../location/LocationPanel';
 import { DetailsPanel } from '../details/DetailsPanel';
@@ -71,6 +72,7 @@ export function MapStage({ stageRef }: { stageRef: RefObject<HTMLDivElement> }) 
 
       <FloorUploadModal />
       <AutoMapModal />
+      <MapDeskModal />
       <UnsavedChangesModal />
     </div>
   );

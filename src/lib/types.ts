@@ -71,8 +71,25 @@ export interface Booking {
   /** Minutes from midnight. */
   start: number;
   end: number;
+  /** Short summary fields the calendar/markers read directly (derived from the form below). */
   by: string;
   purpose: string;
+  // ---- Full booking-form detail, persisted to the vibe-db. Optional so quick/calendar drags
+  // (which only capture a time window) and older stored rows stay valid. ----
+  /** 'space' -> spacebooking form, 'facility' -> facilitybooking form. */
+  module?: 'space' | 'facility';
+  /** Booking name/title (the form's required "Name"). */
+  name?: string;
+  description?: string;
+  /** Employee id hosting the booking (space mode). */
+  host?: string;
+  /** Employee id the booking is reserved by/for. */
+  reservedBy?: string;
+  noOfAttendees?: number;
+  /** Employee ids. */
+  internalAttendees?: string[];
+  /** Employee ids (or free-text) for external attendees. */
+  externalAttendees?: string[];
 }
 
 /** unitId -> employeeId */

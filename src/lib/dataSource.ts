@@ -5,9 +5,10 @@ import type { Assignments, Booking, Employee, Site, Unit } from './types';
 
 /**
  * Data access contract for the Floorplan Manager. Every method is backed by a tiered
- * fallback (see CompositeDataSource): @facilio/api (real backend) -> local mock/localStorage
- * in dev mode; @facilio/api -> Facilio CMMS connector -> this app's own Vibe db -> mock
- * once deployed (see defaultTiers()). Callers never see which tier answered.
+ * fallback (see CompositeDataSource), the same chain in dev and deployed: @facilio/api
+ * (real backend, only active when configured) -> Facilio CMMS connector (opt-in) -> this
+ * app's own Vibe db -> local mock/localStorage (see defaultTiers()). Callers never see
+ * which tier answered.
  */
 export interface FloorplanDataSource {
   readonly name: string;
@@ -206,7 +207,8 @@ export class VibeDbDataSource implements FloorplanDataSource {
     return this.call('getUnits', { floorId });
   }
   saveUnits(floorId: string, units: Unit[]): Promise<void> {
-    return this.call('saveUnits', { floorId, units });
+    // Studio Function params must be number/string — arrays/objects travel as JSON strings.
+    return this.call('saveUnits', { floorId, units: JSON.stringify(units) });
   }
   getAssignments(floorId: string): Promise<Assignments> {
     return this.call('getAssignments', { floorId });
@@ -221,25 +223,32 @@ export class VibeDbDataSource implements FloorplanDataSource {
     return this.call('getBookings', { floorId, date });
   }
   createBooking(input: Omit<Booking, 'id'>): Promise<Booking> {
-    return this.call('createBooking', input);
+    return this.call('createBooking', { booking: JSON.stringify(input) });
   }
 }
 
-const isDevMode = import.meta.env.VITE_DEV_MODE === 'true';
+// The Facilio CMMS connector tier only works when a `facilio-cmms` connection is actually
+// configured for the app; otherwise its `vibe.executeAction` calls 404. It's opt-in via
+// VITE_USE_CONNECTORS so a deployed app without that connection goes straight to the vibe-db
+// tier (the working fallback) instead of spraying connector 404s. Flip it on once the
+// connection exists to get the documented connector-first → vibe-db order.
+const useConnectors = import.meta.env.VITE_USE_CONNECTORS === 'true';
 
 /**
- * Default tier order. In dev mode, the Vibe-runtime-backed tiers (`ConnectorDataSource` via
- * `vibe.executeAction` -> `/api/runtime/connections/*`, `VibeDbDataSource` via
- * `vibe.executeFunction` -> `/api/runtime/functions/*`) don't exist for a plain `npm run dev`
- * session and only add noisy failed round-trips — so they're skipped entirely, going straight
- * from the real `@facilio/api` tier (the APIs documented in `Context/`) to mock. Outside dev
- * mode (a deployed vibe app), those runtime handlers are the legitimate production path and
- * stay in the chain.
+ * Default tier order — the SAME everywhere: real `@facilio/api` → connectors (only when
+ * VITE_USE_CONNECTORS is on) → the app's own Vibe DB (the `floorplanApi` function) → mock.
+ *
+ * The Vibe DB tier used to be dev-excluded (a plain `npm run dev` session has no runtime, so
+ * its calls just 404), but that meant users/space data was api-or-mock only in dev: when the
+ * real api had nothing to render, the vibe-db copy was never consulted. Now it's always in the
+ * chain — in a runtime-less dev session it fails fast (one debug line) and falls to mock,
+ * exactly as before; wherever the runtime IS reachable it serves as the real fallback.
  */
 function defaultTiers(): FloorplanDataSource[] {
-  return isDevMode
-    ? [new FacilioApiDataSource(), new MockDataSource()]
-    : [new FacilioApiDataSource(), new ConnectorDataSource(), new VibeDbDataSource(), new MockDataSource()];
+  const tiers: FloorplanDataSource[] = [new FacilioApiDataSource()];
+  if (useConnectors) tiers.push(new ConnectorDataSource());
+  tiers.push(new VibeDbDataSource(), new MockDataSource());
+  return tiers;
 }
 
 /** Tries each tier in order for every call; first to resolve wins, logging which did. */
@@ -260,6 +269,15 @@ export class CompositeDataSource implements FloorplanDataSource {
       try {
         // @ts-expect-error - dynamic dispatch across the shared interface
         const result = await tier[method](...args);
+        // Empty portfolio/employees counts as a MISS, not an answer: the whole app is built on
+        // those two datasets, and an empty-but-successful response from a higher tier (e.g. the
+        // real employee fetch coming back [] for a permission-limited user) would otherwise mask
+        // real data sitting in a lower tier (vibe-db/mock). NOT applied to per-floor data
+        // (units/bookings/assignments), where empty is a legitimate answer — falling through
+        // there would paint mock markers over a genuinely empty real floor.
+        if ((method === 'getPortfolio' || method === 'getEmployees') && Array.isArray(result) && result.length === 0) {
+          throw new Error(`${tier.name}: ${String(method)} returned no records`);
+        }
         return result;
       } catch (err) {
         lastErr = err;

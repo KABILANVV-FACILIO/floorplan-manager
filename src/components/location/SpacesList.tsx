@@ -68,12 +68,23 @@ export function SpacesList() {
           <SpaceRow key={u.id} unit={u} />
         ))}
         {filtered.length === 0 && <div className={styles.empty}>No spaces match this filter.</div>}
+        {state.mode === 'edit' && state.unplacedUnits.length > 0 && (
+          <>
+            <div className={styles.headRow} style={{ marginTop: 10, padding: '0 2px' }}>
+              <span className={styles.title}>Unplaced</span>
+              <span className={styles.total}>{state.unplacedUnits.length}</span>
+            </div>
+            {state.unplacedUnits.map((u) => (
+              <SpaceRow key={u.id} unit={u} unplaced />
+            ))}
+          </>
+        )}
       </div>
     </div>
   );
 }
 
-function SpaceRow({ unit }: { unit: Unit }) {
+function SpaceRow({ unit, unplaced }: { unit: Unit; unplaced?: boolean }) {
   const { state, actions } = useFloorplan();
   const status = unitStatus(state, unit, (id) => employeeName(state, id));
   const dotColorMap: Record<Unit['type'], string> = {
@@ -82,14 +93,31 @@ function SpaceRow({ unit }: { unit: Unit }) {
     locker: 'var(--brand-indigo-600)',
     parking: 'var(--ink-600)',
   };
+  // In edit mode, desk/locker/parking rows can be dragged onto the canvas: an unplaced record
+  // gets placed at the drop point, a placed one is repositioned (see Canvas onDrop).
+  const draggable = state.mode === 'edit' && unit.type !== 'room';
   return (
-    <div className={styles.row} onClick={() => actions.focusUnit(unit.id, state.stage.w, state.stage.h)}>
+    <div
+      className={styles.row}
+      style={unplaced ? { opacity: 0.75, borderStyle: 'dashed' } : undefined}
+      draggable={draggable}
+      onDragStart={
+        draggable
+          ? (e) => {
+              e.dataTransfer.setData('application/x-floorplan-unit', unit.id);
+              e.dataTransfer.effectAllowed = 'move';
+            }
+          : undefined
+      }
+      onClick={unplaced ? undefined : () => actions.focusUnit(unit.id, state.stage.w, state.stage.h)}
+      title={draggable ? 'Drag onto the floorplan to place' : undefined}
+    >
       <span className={styles.dot} style={{ background: dotColorMap[unit.type] }} />
       <div className={styles.rowText}>
         <div className={styles.rowLabel}>{unit.label}</div>
         <div className={styles.rowSub}>{unit.secondary || [unit.type === 'workstation' ? 'Desk' : unit.type, unit.room].filter(Boolean).join(' · ')}</div>
       </div>
-      <StatusPill label={status.text} bg={status.bg} fg={status.fg} />
+      {unplaced ? <StatusPill label="Unplaced" bg="var(--ink-050)" fg="var(--ink-600)" /> : <StatusPill label={status.text} bg={status.bg} fg={status.fg} />}
     </div>
   );
 }

@@ -12,7 +12,7 @@
   "dependencies": {
     "@facilio/api": "^2.9.1",
     "@facilio/vibe-sdk": "^0.1.4",
-    "@mlightcad/cad-simple-viewer": "^1.5.7",
+    "@mlightcad/cad-simple-viewer": "1.5.7",
     "axios": "^0.21.4",
     "pdfjs-dist": "^6.1.200",
     "qs": "^6.15.3",
