@@ -508,9 +508,25 @@ function CalendarGrid({ dates, bookingsFor, myId, snap, onCreate, onCancel, empl
                       className={[styles.block, mine ? styles.blockMine : styles.blockOther].join(' ')}
                       style={{ top, height }}
                       onMouseDown={(e) => e.stopPropagation()}
-                      onClick={() => mine && onCancel(b)}
-                      title={mine ? 'Click to cancel your booking' : `Booked by ${employeeNameOf(b.by) || 'someone'}`}
+                      title={mine ? 'Your booking' : `Booked by ${employeeNameOf(b.by) || 'someone'}`}
                     >
+                      {/* Cancelling is an explicit button, never a bare click on the block —
+                          clicking a booking to inspect it used to silently cancel it. */}
+                      {mine && (
+                        <button
+                          className={styles.blockCancel}
+                          title="Cancel this booking"
+                          aria-label="Cancel booking"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onCancel(b);
+                          }}
+                        >
+                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round">
+                            <path d="M18 6L6 18M6 6l12 12" />
+                          </svg>
+                        </button>
+                      )}
                       <div className={styles.blockTime}>{fmtTime(b.start)} - {fmtTime(b.end)}</div>
                       <div className={styles.blockName}>{mine ? 'Your booking' : employeeNameOf(b.by) || 'Booked'}</div>
                     </div>

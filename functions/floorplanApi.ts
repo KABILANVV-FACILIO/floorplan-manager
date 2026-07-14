@@ -184,6 +184,19 @@ server.addHandler({
   },
 });
 
+server.addHandler({
+  name: 'cancelBooking',
+  description: 'Remove a booking by id.',
+  parameters: { bookingId: { description: 'Booking id', type: 'string' } },
+  execute: async (args) => {
+    const db = connect();
+    const bookings = parse(getKV(db, 'app_data', 'bookings'), []);
+    const next = bookings.filter((b) => b.id !== args.bookingId);
+    setKV(db, 'app_data', 'bookings', JSON.stringify(next));
+    return { ok: true, removed: bookings.length - next.length };
+  },
+});
+
 // ---- floorplan source files (uploaded image / PDF·CAD render), per floor+plan ----
 // Stored in a SEPARATE table `floorplan_files(key,value)` so a large renderable blob
 // (a data URL) never bloats the app_data row that getUnits/getBookings read on every

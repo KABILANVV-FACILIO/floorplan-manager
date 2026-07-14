@@ -21,6 +21,7 @@ export interface FloorplanDataSource {
   vacateUnit(unitId: string): Promise<void>;
   getBookings(floorId: string, date: string): Promise<Booking[]>;
   createBooking(input: Omit<Booking, 'id'>): Promise<Booking>;
+  cancelBooking(id: string): Promise<void>;
   /**
    * Optional fast path: everything a floor load needs in ONE backend
    * round-trip. `file` is the stored floorplan-file JSON string (see
@@ -128,6 +129,12 @@ export class MockDataSource implements FloorplanDataSource {
     return booking;
   }
 
+  async cancelBooking(id: string): Promise<void> {
+    const saved = loadPersisted();
+    if (!saved?.bookings) return;
+    savePersisted({ bookings: saved.bookings.filter((b) => b.id !== id) });
+  }
+
   async getFloorData(floorId: string, date: string): Promise<FloorBundle> {
     const [units, assignments, bookings] = await Promise.all([
       this.getUnits(floorId),
@@ -204,6 +211,9 @@ export class ConnectorDataSource implements FloorplanDataSource {
     throw new Error('facilio-cmms: booking records not wired');
   }
   async createBooking(): Promise<Booking> {
+    throw new Error('facilio-cmms: booking records not wired');
+  }
+  async cancelBooking(): Promise<void> {
     throw new Error('facilio-cmms: booking records not wired');
   }
 }
@@ -360,6 +370,9 @@ export class VibeDbDataSource implements FloorplanDataSource {
   createBooking(input: Omit<Booking, 'id'>): Promise<Booking> {
     return this.call('createBooking', { booking: JSON.stringify(input) });
   }
+  cancelBooking(id: string): Promise<void> {
+    return this.call('cancelBooking', { bookingId: id });
+  }
 }
 
 // The Facilio CMMS connector tier only works when a `facilio-cmms` connection is actually
@@ -489,6 +502,9 @@ export class CompositeDataSource implements FloorplanDataSource {
   }
   createBooking(input: Omit<Booking, 'id'>) {
     return this.run('createBooking', input);
+  }
+  cancelBooking(id: string) {
+    return this.run('cancelBooking', id);
   }
 }
 

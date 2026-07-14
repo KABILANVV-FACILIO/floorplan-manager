@@ -631,7 +631,17 @@ function buildActions(state: AppState, dispatch: Dispatch<Action>, canvasRectRef
       showToast(`${unitById(state, unitId)?.label ?? 'Space'} booked`);
       return true;
     },
-    cancelBooking: (id: string) => {
+    cancelBooking: async (id: string) => {
+      // Persist BEFORE dispatching: CANCEL_BOOKING bumps bookingsNonce, which refetches the
+      // calendar — if the store still held the booking at that moment it would resurrect.
+      // (That resurrection was a live bug: cancel had no persistence at all and only looked
+      // like it worked until the next refetch.)
+      try {
+        await dataSource.cancelBooking(id);
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.warn('[bookings] cancel persistence failed', err);
+      }
       dispatch({ type: 'CANCEL_BOOKING', id });
       showToast('Booking cancelled');
     },

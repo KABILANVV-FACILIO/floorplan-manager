@@ -357,10 +357,35 @@
   border-radius: var(--radius-sm);
   padding: 4px 7px;
   overflow: hidden;
-  cursor: pointer;
+  cursor: default;
   z-index: 2;
   animation: blockIn 0.22s cubic-bezier(0.2, 0, 0, 1);
   transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+
+/* Explicit cancel affordance on your own bookings — revealed on hover so blocks stay clean. */
+.blockCancel {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 17px;
+  height: 17px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.28);
+  color: currentColor;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s ease, background 0.12s ease;
+}
+.block:hover .blockCancel {
+  opacity: 1;
+}
+.blockCancel:hover {
+  background: rgba(255, 255, 255, 0.5);
 }
 @keyframes blockIn {
   from {

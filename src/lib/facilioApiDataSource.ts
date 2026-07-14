@@ -134,6 +134,9 @@ export class FacilioApiDataSource implements FloorplanDataSource {
   async createBooking(): Promise<Booking> {
     throw new Error('facilio-api: spacebooking not wired');
   }
+  async cancelBooking(): Promise<void> {
+    throw new Error('facilio-api: spacebooking not wired');
+  }
 }
 
 /** Best-effort lookup-field id extraction: tries `{key}.id`, `{key}Id`, then the raw field. */
