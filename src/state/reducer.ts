@@ -42,6 +42,7 @@ export function buildInitialState(): AppState {
   return {
     mode: 'assign',
     tool: 'select',
+    amenityIcon: 'asset',
     floorId: 'hqA3',
     planId: 'workstation',
     expanded: { sBer: true, bA: true },
@@ -132,6 +133,7 @@ export type Action =
   | { type: 'SET_MODE'; mode: AppState['mode'] }
   | { type: 'TOGGLE_EDIT' }
   | { type: 'SET_TOOL'; tool: AppState['tool'] }
+  | { type: 'SET_AMENITY_ICON'; icon: AppState['amenityIcon'] }
   | { type: 'TOGGLE_NAV' }
   | { type: 'SET_NAV_VIEW'; view: AppState['navView'] }
   | { type: 'TOGGLE_NODE'; id: string }
@@ -220,6 +222,8 @@ export function reducer(state: AppState, action: Action): AppState {
       return { ...state, mode: state.mode === 'edit' ? 'assign' : 'edit', tool: 'select', ...resetSelectionState(state) };
     case 'SET_TOOL':
       return { ...state, tool: action.tool, draft: [], calib: [], calibLen: '' };
+    case 'SET_AMENITY_ICON':
+      return { ...state, amenityIcon: action.icon, tool: 'amenity' };
     case 'TOGGLE_NAV':
       return { ...state, navOpen: !state.navOpen };
     case 'SET_NAV_VIEW':

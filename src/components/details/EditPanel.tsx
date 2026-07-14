@@ -2,8 +2,8 @@ import type { ReactNode } from 'react';
 import { useFloorplan } from '../../state/FloorplanContext';
 import { unitById } from '../../state/selectors';
 import { polyAreaM2 } from '../../lib/geometry';
-import { DESK_TYPES, floorImageKey, TYPE_META } from '../../lib/types';
-import type { DeskType, EditTool } from '../../lib/types';
+import { AMENITY_ICONS, AMENITY_META, DESK_TYPES, floorImageKey, TYPE_META } from '../../lib/types';
+import type { AmenityIcon, DeskType, EditTool } from '../../lib/types';
 import { Button } from '../primitives/Button';
 import card from './Card.module.css';
 import styles from './EditPanel.module.css';
@@ -37,11 +37,24 @@ const TOOLS: { id: EditTool; label: string; icon: ReactNode }[] = [
     icon: <><circle cx="12" cy="12" r="9" /><path d="M12 8v8M9 8h3.5a2.5 2.5 0 0 1 0 5H9" /></>,
   },
   {
+    id: 'amenity',
+    label: 'Amenity',
+    icon: <><path d="M20 10c0 6-8 12-8 12S4 16 4 10a8 8 0 0 1 16 0z" /><circle cx="12" cy="10" r="3" /></>,
+  },
+  {
     id: 'calibrate',
     label: 'Calibrate',
     icon: <><path d="M4 12h16" /><path d="M4 12v4M8 12v2M12 12v4M16 12v2M20 12v4" /></>,
   },
 ];
+
+const AMENITY_TOOL_ICON: Record<AmenityIcon, ReactNode> = {
+  asset: <><path d="M21 8l-9-5-9 5 9 5 9-5zM3 8v8l9 5 9-5V8" /><path d="M12 13v8" /></>,
+  fire: <path d="M12 22c4 0 7-2.7 7-7 0-3-2-5.5-3.5-7C14 6 13 4 13 2c-3 2-4.5 4.5-4.5 7C7 8 6 7 5.5 5.5 4.5 8 5 10.5 5 12c0 6 3 10 7 10z" />,
+  stairs: <path d="M3 21h4v-4h4v-4h4V9h4V5h2" />,
+  elevator: <><rect x="4" y="3" width="16" height="18" rx="2" /><path d="M9 12l2.5-3 2.5 3M9 15.5l2.5 3 2.5-3" /></>,
+  restroom: <><circle cx="8" cy="5" r="2" /><path d="M8 9v6m-2.5 6v-4h5v4M6 9h4" /><circle cx="16.5" cy="5" r="2" /><path d="M16.5 9c-1.8 0-2.5 1.4-2.8 3l-.7 3h7l-.7-3c-.3-1.6-1-3-2.8-3zM15 18v3m3-3v3" /></>,
+};
 
 export function EditPanel() {
   const { state, actions } = useFloorplan();
@@ -69,6 +82,31 @@ export function EditPanel() {
           <p className={card.helper}>Draw room: click to add points, click the first point (or press Enter) to close. Press Esc to cancel.</p>
         </div>
       </div>
+
+      {state.tool === 'amenity' && (
+        <div className={card.card}>
+          <div className={card.cardHead}>
+            <h3 className={card.cardTitle}>Amenity marker</h3>
+          </div>
+          <div className={card.cardBody}>
+            <div className={styles.grid}>
+              {AMENITY_ICONS.map((icon) => (
+                <button
+                  key={icon}
+                  className={[styles.toolBtn, state.amenityIcon === icon ? styles.toolBtnActive : ''].join(' ')}
+                  onClick={() => actions.setAmenityIcon(icon)}
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                    {AMENITY_TOOL_ICON[icon]}
+                  </svg>
+                  {AMENITY_META[icon].name}
+                </button>
+              ))}
+            </div>
+            <p className={card.helper}>Click on the plan to drop a {AMENITY_META[state.amenityIcon].name.toLowerCase()} marker.</p>
+          </div>
+        </div>
+      )}
 
       <div className={card.card}>
         <div className={card.cardBody}>

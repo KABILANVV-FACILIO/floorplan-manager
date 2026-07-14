@@ -1,6 +1,6 @@
 import type { AppState } from '../state/types';
 import { conflictsFor, isAssignable, isBookable } from '../state/selectors';
-import { STATE_DEFS } from './types';
+import { AMENITY_META, STATE_DEFS } from './types';
 import type { Unit } from './types';
 import { fmtTime } from './geometry';
 
@@ -40,7 +40,7 @@ export interface MarkerStyle {
   radius: string;
   zIndex: number;
   occText: string | null;
-  icon: 'workstation' | 'locker' | 'parking' | null;
+  icon: 'workstation' | 'locker' | 'parking' | 'asset' | 'fire' | 'stairs' | 'elevator' | 'restroom' | null;
 }
 
 export function markerStyle(state: AppState, unit: Unit, markerScale = 1): MarkerStyle {
@@ -50,6 +50,23 @@ export function markerStyle(state: AppState, unit: Unit, markerScale = 1): Marke
   const shadow = selected ? '0 0 0 3px rgba(0,89,214,0.28)' : 'var(--shadow-xs)';
   const zIndex = selected ? 5 : 2;
   const empId = state.assignments[unit.id];
+
+  // Amenity markers are informational in every mode: solid neutral chip with
+  // the amenity's own glyph, never faded out.
+  if (unit.type === 'amenity') {
+    return {
+      bg: selected ? 'var(--ink-600)' : '#fff',
+      bd: 'var(--ink-600)',
+      fg: selected ? '#fff' : 'var(--ink-700)',
+      opacity: 1,
+      shadow,
+      size,
+      radius: '8px',
+      zIndex,
+      occText: null,
+      icon: unit.icon ?? 'asset',
+    };
+  }
 
   if (state.mode === 'edit') {
     if (selected) {
@@ -66,26 +83,42 @@ export function markerStyle(state: AppState, unit: Unit, markerScale = 1): Marke
 
   if (state.mode === 'assign') {
     if (!isAssignable(unit)) {
-      return { bg: '#fff', bd: 'var(--ink-300)', fg: 'var(--ink-500)', opacity: 0.5, shadow, size, radius, zIndex, occText: null, icon: null };
+      // solid neutral, NOT a washed-out ghost — every marker stays legible
+      return { bg: 'var(--ink-100)', bd: 'var(--ink-500)', fg: 'var(--ink-600)', opacity: 1, shadow, size, radius, zIndex, occText: null, icon: markerIcon(unit.type) };
     }
     if (state.dragOverId === unit.id) {
       return { bg: 'var(--blue-100)', bd: 'var(--blue-500)', fg: 'var(--blue-700)', opacity: 1, shadow: '0 0 0 4px rgba(0,89,214,0.22)', size, radius, zIndex: 6, occText: empId ? initialsOf(employeeNameFallback(state, empId)) : null, icon: empId ? null : markerIcon(unit.type) };
     }
     if (empId) {
-      return { bg: 'var(--blue-500)', bd: 'var(--blue-500)', fg: '#fff', opacity: 1, shadow, size, radius, zIndex, occText: initialsOf(employeeNameFallback(state, empId)), icon: null };
+      return { bg: 'var(--blue-500)', bd: 'var(--blue-600)', fg: '#fff', opacity: 1, shadow, size, radius, zIndex, occText: initialsOf(employeeNameFallback(state, empId)), icon: null };
     }
-    return { bg: '#fff', bd: 'var(--success-500)', fg: 'var(--success-700)', opacity: 1, shadow, size, radius, zIndex, occText: null, icon: markerIcon(unit.type) };
+    return { bg: 'var(--success-050)', bd: 'var(--success-600)', fg: 'var(--success-700)', opacity: 1, shadow, size, radius, zIndex, occText: null, icon: markerIcon(unit.type) };
   }
 
   // book mode
   if (!isBookable(unit)) {
-    return { bg: '#fff', bd: 'var(--ink-400)', fg: 'var(--ink-500)', opacity: 0.35, shadow, size, radius, zIndex, occText: null, icon: null };
+    // Previously 35%-opacity white — assigned desks were invisible on the
+    // plan. Solid grey chip instead, with the occupant's initials so the
+    // booking view still says whose desk it is.
+    return {
+      bg: 'var(--ink-100)',
+      bd: 'var(--ink-500)',
+      fg: 'var(--ink-600)',
+      opacity: 1,
+      shadow,
+      size,
+      radius,
+      zIndex,
+      occText: empId ? initialsOf(employeeNameFallback(state, empId)) : null,
+      icon: empId ? null : markerIcon(unit.type),
+    };
   }
   const conflicts = conflictsFor(state.bookings, unit.id, state.date, state.start, state.end);
   if (conflicts.length) {
-    return { bg: 'var(--danger-050)', bd: 'var(--danger-500)', fg: 'var(--danger-700)', opacity: 1, shadow, size, radius, zIndex, occText: null, icon: markerIcon(unit.type) };
+    return { bg: 'var(--danger-050)', bd: 'var(--danger-600)', fg: 'var(--danger-700)', opacity: 1, shadow, size, radius, zIndex, occText: null, icon: markerIcon(unit.type) };
   }
-  return { bg: '#fff', bd: 'var(--success-500)', fg: 'var(--success-700)', opacity: 1, shadow, size, radius, zIndex, occText: null, icon: markerIcon(unit.type) };
+  // bookable + free: a clearly "go" green, not a white chip with a thin ring
+  return { bg: 'var(--success-050)', bd: 'var(--success-600)', fg: 'var(--success-700)', opacity: 1, shadow, size, radius, zIndex, occText: null, icon: markerIcon(unit.type) };
 }
 
 function markerIcon(type: Unit['type']): MarkerStyle['icon'] {
@@ -102,13 +135,17 @@ function employeeNameFallback(state: AppState, empId: string): string {
 }
 
 export function unitStatus(state: AppState, unit: Unit, employeeName: (id: string) => string): UnitStatus {
+  if (unit.type === 'amenity') {
+    const name = unit.icon ? AMENITY_META[unit.icon].name : 'Amenity';
+    return { key: 'amenity', text: name, bg: TOKEN.ink100, fg: TOKEN.ink600, dot: 'var(--ink-500)' };
+  }
   if (state.mode === 'edit') {
-    const name = { workstation: 'Desk', locker: 'Locker', parking: 'Parking stall', room: 'Room' }[unit.type];
+    const name = { workstation: 'Desk', locker: 'Locker', parking: 'Parking stall', room: 'Room', amenity: 'Amenity' }[unit.type];
     return { key: 'type', text: name, bg: TOKEN.ink100, fg: TOKEN.ink600, dot: moduleColor(state, unit.type, 'free') };
   }
   if (state.mode === 'assign') {
     if (!isAssignable(unit)) {
-      return { key: 'na', text: 'Not assignable', bg: TOKEN.ink100, fg: TOKEN.ink600, dot: moduleColor(state, unit.type, 'free') };
+      return { key: 'na', text: 'Not assignable', bg: TOKEN.ink100, fg: TOKEN.ink600, dot: 'var(--ink-400)' };
     }
     const empId = state.assignments[unit.id];
     if (empId) {
@@ -124,7 +161,15 @@ export function unitStatus(state: AppState, unit: Unit, employeeName: (id: strin
   }
   // book mode
   if (!isBookable(unit)) {
-    return { key: 'notBookable', text: 'Not bookable', bg: TOKEN.ink100, fg: TOKEN.ink600, dot: moduleColor(state, unit.type, 'free') };
+    const empId = state.assignments[unit.id];
+    return {
+      key: 'notBookable',
+      // whose desk it is stays visible from the booking tab too
+      text: empId ? `Assigned · ${employeeName(empId)}` : 'Not bookable',
+      bg: TOKEN.ink100,
+      fg: TOKEN.ink600,
+      dot: 'var(--ink-400)',
+    };
   }
   const conflicts = conflictsFor(state.bookings, unit.id, state.date, state.start, state.end);
   if (conflicts.length) {

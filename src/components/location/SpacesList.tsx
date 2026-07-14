@@ -99,6 +99,7 @@ function SpaceRow({ unit, unplaced }: { unit: Unit; unplaced?: boolean }) {
     room: 'rgba(60,34,157,0.62)',
     locker: 'var(--brand-indigo-600)',
     parking: 'var(--ink-600)',
+    amenity: 'var(--ink-500)',
   };
   // In edit mode, desk/locker/parking rows can be dragged onto the canvas: an unplaced record
   // gets placed at the drop point, a placed one is repositioned (see Canvas onDrop).

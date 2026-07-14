@@ -435,12 +435,16 @@ function roomFill(mode: string, bookings: any[], unitId: string, date: string, s
   return 'rgba(96,119,150,0.1)';
 }
 
+// Shares the web's darker palette (unitStatus keys) so the two views match.
 function dotColorFor(state: any, unit: any, employeeName: (id: string) => string) {
+  if (unit.type === 'amenity') return 'var(--ink-500)';
   const status = unitStatus(state, unit, employeeName);
   if (state.mobileTab === 'assign') {
-    if (unit.type === 'room') return 'var(--ink-300)';
-    return status.key === 'assigned' ? 'var(--blue-500)' : 'var(--success-500)';
+    if (unit.type === 'room') return 'var(--ink-400)';
+    if (status.key === 'na') return 'var(--ink-500)';
+    return status.key === 'assigned' ? 'var(--blue-500)' : 'var(--success-600)';
   }
-  if (!['workstation', 'room', 'parking'].includes(unit.type)) return 'var(--ink-300)';
-  return status.key === 'booked' ? 'var(--danger-500)' : 'var(--success-500)';
+  // book tab
+  if (status.key === 'notBookable') return 'var(--ink-500)'; // assigned desks: visible grey, not hidden
+  return status.key === 'booked' ? 'var(--danger-600)' : 'var(--success-600)';
 }

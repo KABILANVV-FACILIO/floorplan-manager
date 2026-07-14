@@ -14,7 +14,7 @@ import { floorImageKey } from '../../lib/types';
 import type { PolyGeom, Unit, UnitGeom } from '../../lib/types';
 import styles from './Canvas.module.css';
 
-const DRAW_TOOLS = new Set(['room', 'workstation', 'locker', 'parking', 'calibrate']);
+const DRAW_TOOLS = new Set(['room', 'workstation', 'locker', 'parking', 'amenity', 'calibrate']);
 
 /**
  * Live edit-gesture preview, applied to rendering only — the store commits
@@ -361,6 +361,9 @@ export function Canvas() {
     if (state.tool === 'workstation' || state.tool === 'locker' || state.tool === 'parking') {
       actions.placePoint(state.tool, n.x, n.y);
     }
+    if (state.tool === 'amenity') {
+      actions.placeAmenity(state.amenityIcon, n.x, n.y);
+    }
   }
 
   function onDblClick() {
@@ -402,7 +405,8 @@ export function Canvas() {
     .filter((u) => u.type === 'room' && u.geom.kind === 'poly')
     .map((u) => ({ ...u, geom: previewedGeom(u) }));
   const markers = state.units
-    .filter((u) => u.type !== 'room' && u.plan === state.planId)
+    // amenities show on every plan type; desks/lockers/parking only on theirs
+    .filter((u) => u.type !== 'room' && (u.type === 'amenity' || u.plan === state.planId))
     .map((u) => ({ ...u, geom: previewedGeom(u) }));
 
   const selectedRoom = isEditSelect && multiSel.size === 0 ? rooms.find((r) => r.id === state.selected) : undefined;

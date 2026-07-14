@@ -1,4 +1,5 @@
 import type {
+  AmenityIcon,
   AppMode,
   Assignments,
   Booking,
@@ -20,6 +21,8 @@ export type SpaceFilter = 'all' | UnitType;
 export interface AppState {
   mode: AppMode;
   tool: EditTool;
+  /** Which amenity glyph the 'amenity' edit tool places. */
+  amenityIcon: AmenityIcon;
   floorId: string;
   planId: PlanId;
   expanded: Record<string, boolean>;

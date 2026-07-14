@@ -1,5 +1,18 @@
-export type UnitType = 'workstation' | 'locker' | 'parking' | 'room';
+export type UnitType = 'workstation' | 'locker' | 'parking' | 'room' | 'amenity';
 export type PlanId = 'workstation' | 'locker' | 'parking' | 'custom';
+
+/** Informational point markers (not assignable/bookable), shown on every plan type. */
+export type AmenityIcon = 'asset' | 'fire' | 'stairs' | 'elevator' | 'restroom';
+
+export const AMENITY_META: Record<AmenityIcon, { name: string; prefix: string }> = {
+  asset: { name: 'Asset', prefix: 'AS' },
+  fire: { name: 'Fire extinguisher', prefix: 'FE' },
+  stairs: { name: 'Stairs', prefix: 'ST' },
+  elevator: { name: 'Elevator', prefix: 'EL' },
+  restroom: { name: 'Restroom', prefix: 'RR' },
+};
+
+export const AMENITY_ICONS: AmenityIcon[] = ['asset', 'fire', 'stairs', 'elevator', 'restroom'];
 
 /** Display name per plan type — shared by the plan-type switcher and the per-type empty state. */
 export const PLAN_TYPE_NAME: Record<PlanId, string> = {
@@ -24,7 +37,7 @@ export const ALL_PLAN_TYPES: { id: PlanId; name: string }[] = [
   { id: 'parking', name: PLAN_TYPE_NAME.parking },
 ];
 export type AppMode = 'assign' | 'book' | 'edit';
-export type EditTool = 'select' | 'room' | 'workstation' | 'locker' | 'parking' | 'calibrate';
+export type EditTool = 'select' | 'room' | 'workstation' | 'locker' | 'parking' | 'amenity' | 'calibrate';
 export type Role = 'admin' | 'manager' | 'employee';
 
 /** Each plan type on a floor can have its own background image — key floorImages by both. */
@@ -71,6 +84,8 @@ export interface Unit {
   plan: PlanId;
   /** Workstations only — see DeskType. Undefined = ASSIGNED. */
   deskType?: DeskType;
+  /** Amenity markers only — which glyph the marker renders. */
+  icon?: AmenityIcon;
 }
 
 export interface Employee {
@@ -152,6 +167,7 @@ export const TYPE_META: Record<UnitType, { name: string; prefix: string }> = {
   locker: { name: 'Locker', prefix: 'L' },
   parking: { name: 'Parking stall', prefix: 'P' },
   room: { name: 'Room', prefix: 'RM' },
+  amenity: { name: 'Amenity', prefix: 'AM' },
 };
 
 export const ROLES: { id: Role; name: string }[] = [
@@ -203,6 +219,7 @@ export const STATE_DEFS: Record<UnitType, StateDef[]> = {
     { key: 'available', label: 'Available', desc: 'Open to book', def: '#29A01E' },
     { key: 'booked', label: 'Booked', desc: 'Reserved for a time window', def: '#B61919' },
   ],
+  amenity: [{ key: 'free', label: 'Marker', desc: 'Informational marker (stairs, restrooms, extinguishers, …)', def: '#607796' }],
 };
 
 export interface OptDef {
@@ -229,4 +246,5 @@ export const OPT_DEFS: Record<UnitType, OptDef[]> = {
     { key: 'approval', label: 'Require approval', desc: 'Route room requests to a facilities admin', def: false },
     { key: 'checkin', label: 'Require check-in', desc: 'Auto-cancel if nobody checks in within 10 min', def: true },
   ],
+  amenity: [],
 };

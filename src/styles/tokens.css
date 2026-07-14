@@ -35,6 +35,7 @@
 
   /* Semantic */
   --success-700: #0f6f06;
+  --success-600: #1d8712;
   --success-500: #29a01e;
   --success-400: #49b83f;
   --success-050: #e9f7e7;
@@ -44,6 +45,7 @@
   --warning-050: #fff8d6;
 
   --danger-700: #8e1313;
+  --danger-600: #a11616;
   --danger-500: #b61919;
   --danger-050: #fde7e7;
 

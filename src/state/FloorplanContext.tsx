@@ -2,8 +2,8 @@ import { createContext, useContext, useEffect, useMemo, useReducer, useRef } fro
 import type { Dispatch, MutableRefObject, ReactNode } from 'react';
 import { dataSource } from '../lib/dataSource';
 import { PORTFOLIO as MOCK_PORTFOLIO, EMPLOYEES as MOCK_EMPLOYEES, seedBookings, seedUnits, seedAssignments } from '../lib/mockData';
-import { floorImageKey, TYPE_META } from '../lib/types';
-import type { Booking, PlanId, Role, Site, Unit, UnitType } from '../lib/types';
+import { AMENITY_META, floorImageKey, TYPE_META } from '../lib/types';
+import type { AmenityIcon, Booking, PlanId, Role, Site, Unit, UnitType } from '../lib/types';
 import type { CadGroup } from '../lib/cadAnalyze';
 import { isFacilioApiConfigured } from '../lib/facilioApi';
 import { assignUnitReal, createRealBooking, fetchFloorplanImage, fetchMyDesk, findUnitIdForDeskRecord, getFloorPlanSummary, saveFloorplanMarkers, vacateUnitReal } from '../lib/facilioApiDataSource';
@@ -227,6 +227,7 @@ function buildActions(state: AppState, dispatch: Dispatch<Action>, canvasRectRef
       dispatch({ type: 'SET_PENDING_MODE_SWITCH', mode: null });
     },
     setTool: (tool: AppState['tool']) => dispatch({ type: 'SET_TOOL', tool }),
+    setAmenityIcon: (icon: AmenityIcon) => dispatch({ type: 'SET_AMENITY_ICON', icon }),
     toggleNav: () => dispatch({ type: 'TOGGLE_NAV' }),
     setNavView: (view: AppState['navView']) => dispatch({ type: 'SET_NAV_VIEW', view }),
     toggleNode: (id: string) => dispatch({ type: 'TOGGLE_NODE', id }),
@@ -321,6 +322,25 @@ function buildActions(state: AppState, dispatch: Dispatch<Action>, canvasRectRef
       dispatch({ type: 'SET_PENDING_PLACEMENT', placement: { type, x, y } });
     },
     cancelPlacement: () => dispatch({ type: 'SET_PENDING_PLACEMENT', placement: null }),
+    /** Amenity markers place directly (no which-record dialog) with the tool's chosen icon. */
+    placeAmenity: (icon: AmenityIcon, x: number, y: number) => {
+      const count = state.units.filter((u) => u.type === 'amenity' && u.icon === icon).length;
+      const unit: Unit = {
+        id: 'am' + Date.now(),
+        type: 'amenity',
+        icon,
+        label: `${AMENITY_META[icon].name}${count > 0 ? ` ${count + 1}` : ''}`,
+        room: roomLabelAt(state, x, y),
+        geom: { kind: 'point', x, y },
+        floor: state.floorId,
+        // amenities show on every plan type — tag them to the current one so
+        // they're visible where they were placed
+        plan: state.planId,
+      };
+      dispatch({ type: 'ADD_UNIT', unit });
+      dataSource.saveUnits(state.floorId, [...state.units, unit]);
+      showToast(`${unit.label} added`);
+    },
     /** Map dialog: place an EXISTING unplaced record at the pending spot. */
     confirmPlacementExisting: (unitId: string) => {
       const spot = state.pendingPlacement;
@@ -410,6 +430,7 @@ function buildActions(state: AppState, dispatch: Dispatch<Action>, canvasRectRef
         locker: state.units.filter((u) => u.type === 'locker').length,
         parking: state.units.filter((u) => u.type === 'parking').length,
         room: state.units.filter((u) => u.type === 'room').length,
+        amenity: state.units.filter((u) => u.type === 'amenity').length,
       };
       const pad = (n: number) => String(n).padStart(2, '0');
       const created: Unit[] = [];
@@ -448,7 +469,7 @@ function buildActions(state: AppState, dispatch: Dispatch<Action>, canvasRectRef
               room: room ? room.label : null,
               geom: { kind: 'point', x, y },
               floor: state.floorId,
-              plan: type,
+              plan: type === 'workstation' || type === 'locker' || type === 'parking' ? type : 'custom',
             });
           }
         }

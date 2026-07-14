@@ -44,7 +44,7 @@ export function bookedUnitIds(state: AppState): Set<string> {
  * parking stay bookable; lockers stay assignment-only.
  */
 export function isBookable(u: Unit): boolean {
-  if (u.type === 'locker') return false;
+  if (u.type === 'locker' || u.type === 'amenity') return false;
   if (u.type === 'workstation') return u.deskType === 'HOT' || u.deskType === 'HOTEL';
   return true;
 }

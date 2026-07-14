@@ -135,7 +135,7 @@ export function naturalCompare(a: string, b: string): number {
   return a.localeCompare(b, undefined, { numeric: true });
 }
 
-const TYPE_RANK: Record<Unit['type'], number> = { workstation: 0, room: 1, locker: 2, parking: 3 };
+const TYPE_RANK: Record<Unit['type'], number> = { workstation: 0, room: 1, locker: 2, parking: 3, amenity: 4 };
 export function unitSortCompare(a: Unit, b: Unit): number {
   const r = TYPE_RANK[a.type] - TYPE_RANK[b.type];
   if (r !== 0) return r;

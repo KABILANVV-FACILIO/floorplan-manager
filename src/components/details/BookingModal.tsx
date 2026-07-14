@@ -9,18 +9,20 @@ import { Button } from '../primitives/Button';
 import card from './Card.module.css';
 
 /** Resource-field label per unit type, in space-booking mode (matches the real Facilio forms). */
-const SPACE_RESOURCE_LABEL: Record<UnitType, string> = { workstation: 'Desk', parking: 'Parking', room: 'Location', locker: 'Locker' };
+const SPACE_RESOURCE_LABEL: Record<UnitType, string> = { workstation: 'Desk', parking: 'Parking', room: 'Location', locker: 'Locker', amenity: 'Amenity' };
 const SPACE_FORM_NAME: Record<UnitType, string> = {
   workstation: 'Desk Booking Form',
   parking: 'Parking Booking Form',
   room: 'Space Booking Form',
   locker: 'Locker Form',
+  amenity: 'Space Booking Form',
 };
 const FACILITY_FORM_NAME: Record<UnitType, string> = {
   workstation: 'Hot Desk Booking',
   parking: 'Parking Booking',
   room: 'Space Booking',
   locker: 'Locker Booking',
+  amenity: 'Space Booking',
 };
 
 function toLocalInput(dateISO: string, minutes: number): string {
