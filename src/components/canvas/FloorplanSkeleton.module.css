@@ -8,37 +8,128 @@
   gap: 18px;
   padding: 48px;
 }
+
 .sheet {
   position: relative;
   width: min(72%, 980px);
   aspect-ratio: 1492 / 1054;
   max-height: 70%;
   border-radius: 12px;
-  background: #e8edf4;
+  background: #eef2f8;
   box-shadow: var(--shadow-md);
   overflow: hidden;
 }
-/* Faint room-like blocks so the skeleton reads as "a floorplan is coming", not just a grey box. */
+
+/* Room placeholder: breathing base + its own staggered highlight sweep. */
 .block {
   position: absolute;
-  border-radius: 6px;
-  background: #dde4ee;
+  border-radius: 8px;
+  background: #e0e7f1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 10%;
+  padding: 7% 5% 5%;
+  box-sizing: border-box;
+  animation: breathe 2.2s ease-in-out infinite;
 }
+
+.block::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(100deg, transparent 25%, rgba(255, 255, 255, 0.75) 50%, transparent 75%);
+  transform: translateX(-120%);
+  animation: sweep 2.2s ease-in-out infinite;
+  animation-delay: var(--sweep-delay, 0s);
+}
+
+/* the room's "name" line */
+.blockTitle {
+  display: block;
+  width: 55%;
+  max-width: 90px;
+  height: 9px;
+  border-radius: 5px;
+  background: #cfd9e7;
+  flex: none;
+}
+
+/* the room's "desks" */
+.dots {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18%;
+  align-content: flex-start;
+}
+
+.dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #c4d0e2;
+  animation: dotPulse 1.6s ease-in-out infinite;
+}
+
+/* corridor connector lines */
+.line {
+  position: absolute;
+  height: 6px;
+  border-radius: 3px;
+  background: #e0e7f1;
+  animation: breathe 2.2s ease-in-out infinite;
+}
+
+/* soft full-sheet sweep on top, slower than the per-block ones */
 .shimmer {
   position: absolute;
   inset: 0;
-  background: linear-gradient(100deg, transparent 30%, rgba(255, 255, 255, 0.65) 50%, transparent 70%);
-  background-size: 200% 100%;
-  animation: shimmer 1.4s ease-in-out infinite;
+  background: linear-gradient(100deg, transparent 35%, rgba(255, 255, 255, 0.45) 50%, transparent 65%);
+  background-size: 220% 100%;
+  animation: shimmer 2.6s ease-in-out infinite;
 }
+
 @keyframes shimmer {
   0% {
-    background-position: 180% 0;
+    background-position: 190% 0;
   }
   100% {
-    background-position: -80% 0;
+    background-position: -90% 0;
   }
 }
+
+@keyframes sweep {
+  0% {
+    transform: translateX(-120%);
+  }
+  55%,
+  100% {
+    transform: translateX(120%);
+  }
+}
+
+@keyframes breathe {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.72;
+  }
+}
+
+@keyframes dotPulse {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(0.78);
+    opacity: 0.55;
+  }
+}
+
 .label {
   display: flex;
   align-items: center;
@@ -46,6 +137,7 @@
   font: 500 13px/1 var(--font-sans);
   color: var(--ink-600);
 }
+
 .spinner {
   width: 15px;
   height: 15px;
@@ -54,8 +146,45 @@
   border-top-color: var(--blue-500);
   animation: spin 0.8s linear infinite;
 }
+
 @keyframes spin {
   to {
     transform: rotate(360deg);
+  }
+}
+
+/* the "…" — three dots rising in turn after the label text */
+.ellipsis {
+  display: inline-flex;
+  gap: 3px;
+  margin-left: -4px;
+}
+
+.ellipsis span {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--ink-500);
+  animation: ellipsisBounce 1.2s ease-in-out infinite;
+}
+
+.ellipsis span:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.ellipsis span:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+@keyframes ellipsisBounce {
+  0%,
+  60%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.45;
+  }
+  30% {
+    transform: translateY(-4px);
+    opacity: 1;
   }
 }

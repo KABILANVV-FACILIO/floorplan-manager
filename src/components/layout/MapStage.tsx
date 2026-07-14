@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import type { RefObject } from 'react';
 import { useFloorplan } from '../../state/FloorplanContext';
 import { floorMeta } from '../../state/selectors';
@@ -17,6 +18,23 @@ import styles from './MapStage.module.css';
 
 export function MapStage({ stageRef }: { stageRef: RefObject<HTMLDivElement> }) {
   const { state, actions } = useFloorplan();
+
+  // Keep state.stage in sync from the stage wrapper itself. The Canvas has its
+  // own observer, but it's unmounted while the loading skeleton (or the empty
+  // state) shows — the floating panels would then position/clamp against the
+  // stale default 1200×700 stage and land mid-screen over the toolbar.
+  useEffect(() => {
+    const el = stageRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => {
+      const r = el.getBoundingClientRect();
+      if (r.width > 20) actions.setStageSize(r.width, r.height);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const floor = floorMeta(state, state.floorId)?.floor;
   const isDevMode = import.meta.env.VITE_DEV_MODE === 'true';
   const hasImage = !!state.floorImages[floorImageKey(state.floorId, state.planId)];
