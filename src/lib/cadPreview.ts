@@ -34,11 +34,6 @@ export async function renderCadToDataUrl(file: File): Promise<string> {
     });
     if (!manager) throw new Error('CAD viewer failed to initialize');
 
-    // White paper-style background instead of the AutoCAD-default black — set
-    // BEFORE opening so entity conversion resolves ACI-7 ("white") entities to
-    // black against the light background (the library handles that inversion).
-    manager.curView.backgroundColor = 0xffffff;
-
     const buffer = await file.arrayBuffer();
     // Without an explicit view mode, the default open mode restores the drawing's saved
     // AutoCAD viewport (VPORT `*ACTIVE`) rather than framing the actual geometry — for a
@@ -67,7 +62,7 @@ export async function renderCadToDataUrl(file: File): Promise<string> {
 
     const canvas = container.querySelector('canvas');
     if (!canvas) throw new Error('CAD viewer produced no canvas');
-    const dataUrl = canvas.toDataURL('image/png');
+    const dataUrl = cadCanvasToLightSnapshot(canvas);
 
     await manager.destroy();
     return dataUrl;
@@ -78,4 +73,38 @@ export async function renderCadToDataUrl(file: File): Promise<string> {
 
 export function isCadFile(filename: string): boolean {
   return /\.(dwg|dxf)$/i.test(filename);
+}
+
+/**
+ * Dark→light theme for the CAD snapshot. The viewer renders AutoCAD-style
+ * (black background, light linework) and re-applies the drawing's own layout
+ * background during openDocument — overriding any backgroundColor set through
+ * the API before/after open (confirmed against a real DWG). Instead of
+ * fighting that timing, invert near-grayscale pixels in the captured frame:
+ * black background → white, white/gray strokes → black/dark. Chromatic pixels
+ * (colored layers) pass through untouched.
+ */
+export function cadCanvasToLightSnapshot(canvas: HTMLCanvasElement): string {
+  const out = document.createElement('canvas');
+  out.width = canvas.width;
+  out.height = canvas.height;
+  const ctx = out.getContext('2d');
+  if (!ctx) return canvas.toDataURL('image/png');
+  ctx.drawImage(canvas, 0, 0);
+  const img = ctx.getImageData(0, 0, out.width, out.height);
+  const d = img.data;
+  for (let i = 0; i < d.length; i += 4) {
+    const r = d[i];
+    const g = d[i + 1];
+    const b = d[i + 2];
+    // near-grayscale = low chroma; leave colored entities (green/blue/red layers) alone
+    if (Math.max(r, g, b) - Math.min(r, g, b) < 28) {
+      const v = 255 - Math.round((r + g + b) / 3);
+      d[i] = v;
+      d[i + 1] = v;
+      d[i + 2] = v;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  return out.toDataURL('image/png');
 }

@@ -1,4 +1,5 @@
 import type { UnitType } from './types';
+import { cadCanvasToLightSnapshot } from './cadPreview';
 
 /**
  * Opens a DWG/DXF once and produces BOTH the rendered preview snapshot and
@@ -84,9 +85,6 @@ export async function analyzeCadFile(file: File): Promise<CadAnalysis> {
     });
     if (!manager) throw new Error('CAD viewer failed to initialize');
 
-    // Same white-background treatment as renderCadToDataUrl (ACI-7 inverts).
-    manager.curView.backgroundColor = 0xffffff;
-
     const buffer = await file.arrayBuffer();
     const ok = await manager.openDocument(file.name, buffer, { openViewMode: AcApOpenViewMode.Extents });
     if (!ok) throw new Error('Could not parse this CAD file');
@@ -101,7 +99,7 @@ export async function analyzeCadFile(file: File): Promise<CadAnalysis> {
 
     const canvas = container.querySelector('canvas');
     if (!canvas) throw new Error('CAD viewer produced no canvas');
-    const previewUrl = canvas.toDataURL('image/png');
+    const previewUrl = cadCanvasToLightSnapshot(canvas);
 
     // Snapshot taken — now enumerate model space through the same camera.
     const view = manager.curView;
