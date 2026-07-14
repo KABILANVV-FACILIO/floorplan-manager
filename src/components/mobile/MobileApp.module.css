@@ -278,15 +278,6 @@
   font: 600 13.5px/1 var(--font-sans);
   color: var(--ink-900);
 }
-.slotDateNative {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  opacity: 0;
-  border: none;
-  cursor: pointer;
-}
 
 /* Start → End row with a duration chip. */
 .slotTimeRow {

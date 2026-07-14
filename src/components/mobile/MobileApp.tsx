@@ -11,6 +11,7 @@ import { MobileTimePicker } from './MobileTimePicker';
 import { MobileQrScanner } from './MobileQrScanner';
 import { MobileSpacesSheet } from './MobileSpacesSheet';
 import { MobileMyBookings } from './MobileMyBookings';
+import { MobileDatePicker } from './MobileDatePicker';
 import { FloorplanSkeleton } from '../canvas/FloorplanSkeleton';
 import { markerStyle } from '../../lib/unitStatus';
 import { employeeName, myAssignedUnit } from '../../state/selectors';
@@ -31,6 +32,7 @@ export function MobileApp({ mode, onClose }: MobileAppProps) {
   const [qrOpen, setQrOpen] = useState(false);
   const [spacesOpen, setSpacesOpen] = useState(false);
   const [myBookingsOpen, setMyBookingsOpen] = useState(false);
+  const [dateOpen, setDateOpen] = useState(false);
   const myBookingsCount = state.bookings.filter((b) => b.by === state.bookBy).length;
 
   const rooms = state.units.filter((u) => u.type === 'room' && u.geom.kind === 'poly');
@@ -129,7 +131,7 @@ export function MobileApp({ mode, onClose }: MobileAppProps) {
 
             {state.mobileTab === 'book' && (
               <div className={styles.slotPicker}>
-                <label className={styles.slotDateField}>
+                <button className={styles.slotDateField} onClick={() => setDateOpen(true)}>
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--blue-500)" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
                     <rect x="3" y="4" width="18" height="17" rx="2" />
                     <path d="M16 2v4M8 2v4M3 10h18" />
@@ -140,12 +142,10 @@ export function MobileApp({ mode, onClose }: MobileAppProps) {
                       {new Date(state.date).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}
                     </span>
                   </div>
-                  {/* native picker sits invisibly over the field and drives the tap */}
-                  <input className={styles.slotDateNative} type="date" value={state.date} onChange={(e) => actions.setDate(e.target.value)} />
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--ink-400)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M6 9l6 6 6-6" />
                   </svg>
-                </label>
+                </button>
                 <div className={styles.slotTimeRow}>
                   <TimeField label="Start" value={state.start} active={state.mobTimePick === 'start'} onClick={() => actions.setMobTimePick(state.mobTimePick === 'start' ? null : 'start')} />
                   <svg className={styles.slotArrow} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--ink-400)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -181,6 +181,7 @@ export function MobileApp({ mode, onClose }: MobileAppProps) {
           <MobileUnitSheet />
           <MobileSpacesSheet open={spacesOpen} onClose={() => setSpacesOpen(false)} />
           <MobileMyBookings open={myBookingsOpen} onClose={() => setMyBookingsOpen(false)} />
+          <MobileDatePicker open={dateOpen} onClose={() => setDateOpen(false)} />
           {qrOpen && <MobileQrScanner onClose={() => setQrOpen(false)} />}
         </div>
       </div>
