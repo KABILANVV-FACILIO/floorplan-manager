@@ -117,20 +117,30 @@ export class MockDataSource implements FloorplanDataSource {
 
 /**
  * Facilio CMMS connector tier, via `vibe.executeAction('facilio-cmms', <action>, payload)`.
- * Only the space/floor/building graph has a confirmed action surface today
- * (facilio-cmms.list-spaces / list-floors / list-buildings / create-space / update-space).
- * There is no confirmed booking/assignment action, so those methods intentionally throw —
- * letting CompositeDataSource fall through to the db tier — rather than guessing a slug.
+ * Response shapes confirmed against a live connection (2026-07): every list action
+ * returns `{ pagination, data: [...], success }`, expanded lookups arrive as nested
+ * records ({id, name, ...}), unexpanded ones as bare `{id}` objects, and
+ * `filters: "floor=<id>"` server-scopes list-spaces to that one floor.
+ *
+ * READ-ONLY tier by design: writes fall through to the db/mock tiers. (saveUnits is
+ * called on every micro-edit with the full unit list — pushing that through
+ * create-space would mint duplicate real records each edit.) No confirmed
+ * booking/assignment/employee actions either, so those throw to fall through too.
  */
 export class ConnectorDataSource implements FloorplanDataSource {
   readonly name = 'facilio-cmms';
 
   async getPortfolio(): Promise<Site[]> {
-    const [buildingsRes, floorsRes] = await Promise.all([
-      vibe.executeAction('facilio-cmms', 'list-buildings', { page_size: 200 }),
-      vibe.executeAction('facilio-cmms', 'list-floors', { page_size: 200, expand: 'building,site' }),
+    const [sitesRes, buildingsRes, floorsRes] = await Promise.all([
+      vibe.executeAction('facilio-cmms', 'list-sites', { page_size: 200, select: 'id,name' }),
+      vibe.executeAction('facilio-cmms', 'list-buildings', { page_size: 200, expand: 'site', select: 'id,name,site' }),
+      vibe.executeAction('facilio-cmms', 'list-floors', {
+        page_size: 200,
+        expand: 'building,site',
+        select: 'id,name,building,site,floorlevel',
+      }),
     ]);
-    return buildFromCmmsGraph(buildingsRes, floorsRes);
+    return buildFromCmmsGraph(sitesRes, buildingsRes, floorsRes);
   }
 
   async getEmployees(): Promise<Employee[]> {
@@ -142,18 +152,14 @@ export class ConnectorDataSource implements FloorplanDataSource {
     const res = await vibe.executeAction('facilio-cmms', 'list-spaces', {
       filters: `floor=${floorId}`,
       page_size: 200,
+      expand: 'spaceCategory',
+      select: 'id,name,floor,spaceCategory,area,maxOccupancy',
     });
     return mapCmmsSpacesToUnits(res, floorId);
   }
 
-  async saveUnits(_floorId: string, units: Unit[]): Promise<void> {
-    await Promise.all(
-      units.map((u) =>
-        vibe.executeAction('facilio-cmms', 'create-space', {
-          space: { name: u.label, site: undefined, floor: u.floor, spaceCategory: u.type },
-        })
-      )
-    );
+  async saveUnits(): Promise<void> {
+    throw new Error('facilio-cmms: read-only tier — unit writes persist on the db/mock tiers');
   }
 
   async getAssignments(): Promise<Assignments> {
@@ -173,15 +179,112 @@ export class ConnectorDataSource implements FloorplanDataSource {
   }
 }
 
-function buildFromCmmsGraph(_buildingsRes: unknown, _floorsRes: unknown): Site[] {
-  // TODO: once `facilio-cmms.list-buildings` / `list-floors` response shapes are confirmed
-  // against a live connection, map them into Site[] here. Until then, treat as unavailable
-  // so CompositeDataSource falls through.
-  throw new Error('facilio-cmms: portfolio mapping not implemented');
+type CmmsRow = Record<string, unknown>;
+
+function cmmsRows(res: unknown): CmmsRow[] {
+  const data = (res as { data?: unknown } | null)?.data;
+  return Array.isArray(data) ? (data as CmmsRow[]) : [];
 }
 
-function mapCmmsSpacesToUnits(_res: unknown, _floorId: string): Unit[] {
-  throw new Error('facilio-cmms: space mapping not implemented');
+function lookupId(v: unknown): string | null {
+  if (v == null) return null;
+  if (typeof v === 'number') return String(v);
+  const id = (v as { id?: unknown }).id;
+  return id == null ? null : String(id);
+}
+
+function lookupName(v: unknown): string | null {
+  const name = (v as { name?: unknown } | null)?.name;
+  return typeof name === 'string' && name ? name : null;
+}
+
+/** sites + buildings(expand site) + floors(expand building,site) → the portfolio tree. */
+function buildFromCmmsGraph(sitesRes: unknown, buildingsRes: unknown, floorsRes: unknown): Site[] {
+  const sitesById = new Map<string, Site>();
+  const ensureSite = (id: string | null, name: string | null): Site => {
+    const key = id ?? 'unknown';
+    let site = sitesById.get(key);
+    if (!site) {
+      site = { id: key, name: name ?? 'Portfolio', buildings: [] };
+      sitesById.set(key, site);
+    } else if (name && site.name === 'Portfolio') {
+      site.name = name;
+    }
+    return site;
+  };
+
+  for (const s of cmmsRows(sitesRes)) {
+    const id = lookupId(s.id);
+    if (id) ensureSite(id, typeof s.name === 'string' ? s.name : null);
+  }
+
+  const buildingsById = new Map<string, { id: string; name: string; floors: Site['buildings'][number]['floors'] }>();
+  const ensureBuilding = (id: string | null, name: string | null, siteRef: unknown) => {
+    if (!id) return null;
+    let b = buildingsById.get(id);
+    if (!b) {
+      b = { id, name: name ?? `Building ${id}`, floors: [] };
+      buildingsById.set(id, b);
+      ensureSite(lookupId(siteRef), lookupName(siteRef)).buildings.push(b);
+    } else if (name && b.name.startsWith('Building ')) {
+      b.name = name;
+    }
+    return b;
+  };
+
+  for (const b of cmmsRows(buildingsRes)) {
+    ensureBuilding(lookupId(b.id), typeof b.name === 'string' ? b.name : null, b.site);
+  }
+
+  const floors = cmmsRows(floorsRes)
+    .map((f) => ({
+      id: lookupId(f.id),
+      name: typeof f.name === 'string' ? f.name : `Floor ${lookupId(f.id)}`,
+      level: typeof f.floorlevel === 'number' ? f.floorlevel : Number.MAX_SAFE_INTEGER,
+      building: f.building,
+      site: f.site,
+    }))
+    .sort((a, b) => a.level - b.level || a.name.localeCompare(b.name));
+  for (const f of floors) {
+    if (!f.id) continue;
+    const building =
+      ensureBuilding(lookupId(f.building), lookupName(f.building), f.site) ??
+      ensureBuilding('unassigned', 'Unassigned', f.site);
+    building?.floors.push({ id: f.id, name: f.name });
+  }
+
+  // drop empty shells the tree can't navigate into
+  const sites = [...sitesById.values()];
+  for (const site of sites) site.buildings = site.buildings.filter((b) => b.floors.length > 0);
+  return sites.filter((s) => s.buildings.length > 0);
+}
+
+/**
+ * Real spaces of ONE floor (server-filtered) → sidebar-listed room units. Space
+ * records carry no plan geometry, so they get a point placeholder and are NOT
+ * drawn on the canvas (room renderers are poly-guarded) — deliberately not
+ * synthesized into fake positions.
+ */
+function mapCmmsSpacesToUnits(res: unknown, floorId: string): Unit[] {
+  return cmmsRows(res)
+    .filter((s) => {
+      const f = lookupId(s.floor);
+      return f == null || f === floorId; // trust but verify the server-side floor scope
+    })
+    .map((s) => {
+      const category = lookupName(s.spaceCategory);
+      const occupancy = typeof s.maxOccupancy === 'number' && s.maxOccupancy > 0 ? `seats ${s.maxOccupancy}` : null;
+      return {
+        id: String(s.id),
+        type: 'room' as const,
+        label: typeof s.name === 'string' && s.name ? s.name : `Space ${s.id}`,
+        secondary: [category, occupancy].filter(Boolean).join(' · ') || undefined,
+        room: null,
+        geom: { kind: 'point' as const, x: 0, y: 0 },
+        floor: floorId,
+        plan: 'custom' as const,
+      };
+    });
 }
 
 /**

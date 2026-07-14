@@ -200,7 +200,9 @@ export function Canvas() {
   const invZ = (1 / state.view.z).toFixed(4);
   const planeTransition = state.viewAnim ? 'transform 340ms cubic-bezier(0.2,0,0,1)' : 'none';
 
-  const rooms = state.units.filter((u) => u.type === 'room');
+  // poly-guard matters: connector-tier spaces arrive without plan geometry
+  // (listed in the sidebar, not drawn) — RoomPolygon would crash on them.
+  const rooms = state.units.filter((u) => u.type === 'room' && u.geom.kind === 'poly');
   const markers = state.units.filter((u) => u.type !== 'room' && u.plan === state.planId);
 
   let canvasHint = '';
