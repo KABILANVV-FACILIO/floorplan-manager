@@ -9,6 +9,7 @@ import { MobileFloorPicker } from './MobileFloorPicker';
 import { MobileUnitSheet } from './MobileUnitSheet';
 import { MobileTimePicker } from './MobileTimePicker';
 import { MobileQrScanner } from './MobileQrScanner';
+import { FloorplanSkeleton } from '../canvas/FloorplanSkeleton';
 import { unitStatus } from '../../lib/unitStatus';
 import { employeeName, initials, myAssignedUnit } from '../../state/selectors';
 import { floorImageKey } from '../../lib/types';
@@ -131,7 +132,11 @@ export function MobileApp({ mode, onClose }: MobileAppProps) {
           </div>
 
           <div className={styles.body}>
-            {hasPlan ? (
+            {state.floorImageLoading || state.loading ? (
+              <div style={{ position: 'relative', flex: 1, minHeight: 0 }}>
+                <FloorplanSkeleton />
+              </div>
+            ) : hasPlan ? (
               <MobileMap rooms={rooms} markers={markers} legend={legend} />
             ) : (
               <div className={styles.noPlan}>

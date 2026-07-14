@@ -1,31 +1,49 @@
+import { useMemo, useState } from 'react';
 import { useFloorplan } from '../../state/FloorplanContext';
 import { employeeName, initials, isAssignable, isBookable, unitById } from '../../state/selectors';
 import { unitStatus } from '../../lib/unitStatus';
 import { fmtTime } from '../../lib/geometry';
 import { TYPE_META } from '../../lib/types';
-import { Select } from '../primitives/Select';
 import styles from './MobileUnitSheet.module.css';
+
+/** Cap the rendered rows — the RCU directory is 1,400+ people; search narrows. */
+const MAX_ROWS = 60;
 
 export function MobileUnitSheet() {
   const { state, actions } = useFloorplan();
   const unit = unitById(state, state.mobSel);
+  const [empQuery, setEmpQuery] = useState('');
+
+  const empId = unit ? state.assignments[unit.id] : undefined;
+  const showBookTab = state.mobileTab === 'book';
+  const assignable = unit ? isAssignable(unit) : false;
+  // Employee picking expands the sheet to near-full height with its own
+  // search — a plain dropdown was unusable against the full directory.
+  const picking = !!unit && !showBookTab && assignable && (!empId || state.mobAssignEdit);
+
+  const filtered = useMemo(() => {
+    const q = empQuery.trim().toLowerCase();
+    if (!q) return state.employees;
+    return state.employees.filter((e) => e.name.toLowerCase().includes(q) || e.dept.toLowerCase().includes(q));
+  }, [state.employees, empQuery]);
+
   if (!unit) return null;
 
   const status = unitStatus(state, unit, (id) => employeeName(state, id));
-  const empId = state.assignments[unit.id];
   const bookable = isBookable(unit);
-  const assignable = isAssignable(unit);
-  const showBookTab = state.mobileTab === 'book';
 
   function close() {
     actions.setMobSel(null);
     actions.setMobAssignEdit(false);
+    setEmpQuery('');
   }
+
+  const shown = filtered.slice(0, MAX_ROWS);
 
   return (
     <>
       <div className={styles.backdrop} onClick={close} />
-      <div className={styles.sheet}>
+      <div className={[styles.sheet, picking ? styles.sheetTall : ''].join(' ')}>
         <div className={styles.handle} />
         <div className={styles.headRow}>
           <div className={styles.headText}>
@@ -72,20 +90,57 @@ export function MobileUnitSheet() {
             </div>
           </>
         )}
-        {!showBookTab && assignable && (!empId || state.mobAssignEdit) && (
-          <div style={{ marginTop: 12 }}>
+
+        {picking && (
+          <div className={styles.pickWrap}>
             <div className={styles.assignLabel}>Assign to</div>
-            <Select
-              value={empId ?? null}
-              placeholder="— Choose a person —"
-              options={state.employees.map((e) => ({ value: e.id, label: e.name, sublabel: e.dept }))}
-              onChange={(v) => {
-                actions.assign(v, unit.id);
-                actions.setMobAssignEdit(false);
-              }}
-              fullWidth
-              aria-label="Assign to"
+            <input
+              className={styles.empSearch}
+              placeholder="Search people or departments"
+              value={empQuery}
+              onChange={(e) => setEmpQuery(e.target.value)}
             />
+            <div className={styles.empList}>
+              {shown.map((e) => (
+                <button
+                  key={e.id}
+                  className={styles.empRow}
+                  onClick={() => {
+                    actions.assign(e.id, unit.id);
+                    actions.setMobAssignEdit(false);
+                    setEmpQuery('');
+                  }}
+                >
+                  <span className={styles.avatar}>{initials(e.name)}</span>
+                  <span className={styles.empText}>
+                    <span className={styles.empName}>{e.name}</span>
+                    <span className={styles.empDept}>{e.dept}</span>
+                  </span>
+                  {empId === e.id && (
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--blue-600)" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M20 6L9 17l-5-5" />
+                    </svg>
+                  )}
+                </button>
+              ))}
+              {filtered.length > MAX_ROWS && (
+                <div className={styles.listNote}>
+                  Showing {MAX_ROWS} of {filtered.length} — keep typing to narrow down.
+                </div>
+              )}
+              {filtered.length === 0 && <div className={styles.listNote}>No people match “{empQuery}”.</div>}
+            </div>
+            {state.mobAssignEdit && (
+              <button
+                className={styles.cancelPick}
+                onClick={() => {
+                  actions.setMobAssignEdit(false);
+                  setEmpQuery('');
+                }}
+              >
+                Cancel
+              </button>
+            )}
           </div>
         )}
       </div>

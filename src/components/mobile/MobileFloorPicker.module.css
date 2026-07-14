@@ -93,3 +93,15 @@
   color: var(--ink-500);
   margin-top: 2px;
 }
+
+.levelIcon {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  background: var(--blue-050);
+  color: var(--blue-600);
+}

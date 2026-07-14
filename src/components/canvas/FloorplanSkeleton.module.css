@@ -14,7 +14,9 @@
 
 .card {
   position: relative;
-  width: min(48vw, 352px);
+  /* 84% of the wrap (not vw): sizes correctly inside the narrow mobile map
+     area as well as the desktop stage, capped at the design's scale. */
+  width: min(84%, 352px);
   aspect-ratio: 432 / 312;
   background: #fff;
   border: 1px solid var(--ink-200, #d8e3f1);
