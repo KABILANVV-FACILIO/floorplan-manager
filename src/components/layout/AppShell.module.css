@@ -1,0 +1,36 @@
+.root {
+  position: relative;
+  height: 100vh;
+  height: 100dvh;
+  display: flex;
+  background: #eef3f9;
+  overflow: hidden;
+  font-family: var(--font-sans);
+}
+.mobileRoot {
+  position: relative;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+  font-family: var(--font-sans);
+}
+.loading {
+  height: 100vh;
+  height: 100dvh;
+  display: grid;
+  place-items: center;
+  background: #eef3f9;
+}
+.spinner {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 3px solid var(--ink-200);
+  border-top-color: var(--blue-500);
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

@@ -1,0 +1,13 @@
+node_modules/
+dist/
+.env.local
+.DS_Store
+*.log
+.tsbuild/
+*.tsbuildinfo
+
+# Internal Facilio backend/architecture reference docs — not for the public repo.
+Context/
+
+# Claude Code local session settings/permissions — personal, not shared.
+.claude/settings.local.json

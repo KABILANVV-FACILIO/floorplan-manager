@@ -1,0 +1,28 @@
+.wrap {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  background: transparent;
+  user-select: none;
+}
+.plane {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform-origin: 0 0;
+}
+.hint {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--ink-900);
+  color: #fff;
+  border-radius: var(--radius-sm);
+  padding: 7px 12px;
+  font: 500 12px/1 var(--font-sans);
+  box-shadow: var(--shadow-md);
+  pointer-events: none;
+  white-space: nowrap;
+  z-index: 30;
+}

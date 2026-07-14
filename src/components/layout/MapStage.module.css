@@ -1,0 +1,13 @@
+.stage {
+  flex: 1;
+  position: relative;
+  min-width: 0;
+  background: radial-gradient(circle, rgba(96, 119, 150, 0.13) 1px, transparent 1.4px) 0 0 / 24px 24px, #eef3f9;
+  overflow: hidden;
+}
+.resetLayout {
+  position: absolute;
+  left: 12px;
+  bottom: 48px;
+  z-index: 35;
+}

@@ -1,0 +1,47 @@
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.toolBtn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  padding: 0 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--ink-200);
+  background: #fff;
+  color: var(--ink-700);
+  font: 500 12px/1 var(--font-sans);
+  cursor: pointer;
+}
+.toolBtn:hover {
+  background: var(--ink-050);
+}
+.toolBtnActive {
+  background: var(--blue-025);
+  border-color: var(--blue-200);
+  color: var(--blue-600);
+}
+.calibRow {
+  display: flex;
+  gap: 8px;
+}
+.geomPreview {
+  margin: 10px 0 0;
+  padding: 8px 10px;
+  background: var(--ink-050);
+  border-radius: var(--radius-sm);
+  font: 400 10.5px/1.4 var(--font-mono);
+  color: var(--ink-600);
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 96px;
+  overflow-y: auto;
+}
