@@ -6,7 +6,69 @@ import { fmtTime } from '../../lib/geometry';
 import { dataSource } from '../../lib/dataSource';
 import type { Booking, Unit, UnitType } from '../../lib/types';
 import { Select } from '../primitives/Select';
+import { PortfolioTree } from '../location/PortfolioTree';
+import loc from '../location/LocationPanel.module.css';
 import styles from './BookingsView.module.css';
+
+/**
+ * The calendar's location switcher — the SAME control as the portfolio tab's (LocationPanel):
+ * the Site › Building path over the floor name with a chevron, expanding into the full
+ * PortfolioTree. Here it lives in the header breadcrumb spot and opens as a popover; picking a
+ * floor (PortfolioTree calls selectFloor) reloads units/bookings in place and closes it.
+ */
+function LocationSwitcher() {
+  const { state } = useFloorplan();
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const meta = floorMeta(state, state.floorId);
+
+  // A floor pick changes floorId — that's the close signal (the tree lives inside the popover).
+  useEffect(() => {
+    setOpen(false);
+  }, [state.floorId]);
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    window.addEventListener('mousedown', onDown);
+    return () => window.removeEventListener('mousedown', onDown);
+  }, [open]);
+
+  return (
+    <div ref={wrapRef} className={styles.locSwitcherWrap}>
+      <button className={loc.switcher} onClick={() => setOpen((o) => !o)}>
+        <span className={loc.switcherIcon}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 2L2 7l10 5 10-5-10-5z M2 12l10 5 10-5 M2 17l10 5 10-5" />
+          </svg>
+        </span>
+        <span className={loc.switcherText}>
+          <span className={loc.switcherPath}>{meta ? `${meta.site.name} › ${meta.building.name}` : ''}</span>
+          <span className={loc.switcherName}>{meta?.floor.name ?? 'Choose a floor'}</span>
+        </span>
+        <svg
+          width="16"
+          height="16"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="var(--ink-500)"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          style={{ flexShrink: 0, transform: `rotate(${open ? 180 : 0}deg)`, transition: 'transform 160ms var(--ease-standard)' }}
+        >
+          <path d="M6 9l6 6 6-6" />
+        </svg>
+      </button>
+      {open && (
+        <div className={styles.locPopover}>
+          <PortfolioTree />
+        </div>
+      )}
+    </div>
+  );
+}
 
 /** Category tabs → the unit type they book. Lockers are assignment-only (not time-booked). */
 const CATEGORIES: { id: UnitType; label: string; bookable: boolean }[] = [
@@ -82,21 +144,6 @@ export function BookingsView() {
     [state.units, category]
   );
 
-  // Location switcher: every floor in the portfolio, so the calendar can move between floors
-  // (and buildings/sites — the sublabel disambiguates) without a round trip through the map view.
-  const floorOptions = useMemo(
-    () =>
-      state.portfolio.flatMap((site) =>
-        site.buildings.flatMap((building) =>
-          building.floors.map((floor) => ({
-            value: floor.id,
-            label: floor.name,
-            sublabel: `${site.name} · ${building.name}`,
-          }))
-        )
-      ),
-    [state.portfolio]
-  );
 
   // Keep a valid resource selected as category/floor changes.
   useEffect(() => {
@@ -212,27 +259,7 @@ export function BookingsView() {
         <div className={styles.headerRow}>
           <div>
             <div className={styles.breadcrumb}>
-              {meta ? (
-                <>
-                  <span>{meta.site.name}</span>
-                  <span className={styles.crumbSep}>/</span>
-                  <span>{meta.building.name}</span>
-                  <span className={styles.crumbSep}>/</span>
-                </>
-              ) : (
-                <span>Workplace</span>
-              )}
-              {/* The floor crumb is the location switcher — picking a floor (any building/site)
-                  reloads units+bookings via selectFloor, and the calendar refetches off floorId. */}
-              {floorOptions.length > 0 && (
-                <Select
-                  value={state.floorId}
-                  options={floorOptions}
-                  onChange={(floorId) => actions.selectFloor(floorId)}
-                  size="sm"
-                  aria-label="Floor"
-                />
-              )}
+              <LocationSwitcher />
             </div>
             <h1 className={styles.h1}>Bookings</h1>
             <p className={styles.sub}>Calendar and resource view across bookable spaces</p>
