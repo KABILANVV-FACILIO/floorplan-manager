@@ -11,3 +11,6 @@ Context/
 
 # Claude Code local session settings/permissions — personal, not shared.
 .claude/settings.local.json
+
+# Regenerable demo seed (real occupancy names) — lives in the Vibe DB, not the repo.
+scripts/rcu-seed.json

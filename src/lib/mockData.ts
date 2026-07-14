@@ -1,7 +1,6 @@
 import type { Assignments, Booking, Employee, Site, Unit } from './types';
-import { RCU_ASSIGNMENTS, RCU_EMPLOYEES, RCU_PORTFOLIO, RCU_UNITS } from './rcuData';
 
-const DEMO_EMPLOYEES: Employee[] = [
+export const EMPLOYEES: Employee[] = [
   { id: 'e1', name: 'Priya Kumar', dept: 'Operations' },
   { id: 'e2', name: 'Jonas Weber', dept: 'Engineering' },
   { id: 'e3', name: 'Maria Silva', dept: 'Finance' },
@@ -18,10 +17,7 @@ const DEMO_EMPLOYEES: Employee[] = [
   { id: 'e14', name: 'Julia Wagner', dept: 'Finance' },
 ];
 
-/** Demo people first (booking seeds reference e1..e14), then the RCU roster. */
-export const EMPLOYEES: Employee[] = [...DEMO_EMPLOYEES, ...RCU_EMPLOYEES];
-
-const DEMO_PORTFOLIO: Site[] = [
+export const PORTFOLIO: Site[] = [
   {
     id: 'sBer',
     name: 'HQ Berlin',
@@ -83,8 +79,10 @@ const DEMO_PORTFOLIO: Site[] = [
   },
 ];
 
-/** RCU occupancy export (real test data, see lib/rcuData.ts) leads; demo sites kept for the positioned hqA3 plan. */
-export const PORTFOLIO: Site[] = [...RCU_PORTFOLIO, ...DEMO_PORTFOLIO];
+// The RCU demo dataset is NOT bundled here — it's seeded into the Vibe DB
+// (scripts/gen-rcu-data.mjs → scripts/seed-vibe-db.mjs) and served by the
+// vibe-db tier's floorplanApi function; the composite portfolio union merges
+// it with this built-in demo site and the connector's real org tree.
 
 function planForType(type: Unit['type']): Unit['plan'] {
   if (type === 'workstation' || type === 'locker' || type === 'parking') return type;
@@ -161,11 +159,11 @@ export function seedUnits(): Unit[] {
       floor: 'hqA3',
     });
   });
-  return [...U.map((u) => ({ ...u, plan: planForType(u.type) })), ...RCU_UNITS];
+  return U.map((u) => ({ ...u, plan: planForType(u.type) }));
 }
 
 export function seedAssignments(): Assignments {
-  return { ws1: 'e1', ws2: 'e2', ws4: 'e3', ws7: 'e4', ws9: 'e5', ws13: 'e6', ws17: 'e7', ws21: 'e8', ...RCU_ASSIGNMENTS };
+  return { ws1: 'e1', ws2: 'e2', ws4: 'e3', ws7: 'e4', ws9: 'e5', ws13: 'e6', ws17: 'e7', ws21: 'e8' };
 }
 
 export function seedBookings(date: string): Booking[] {
