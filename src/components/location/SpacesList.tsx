@@ -3,6 +3,7 @@ import { employeeName } from '../../state/selectors';
 import { unitSortCompare } from '../../lib/geometry';
 import { unitStatus } from '../../lib/unitStatus';
 import { Chip } from '../primitives/Chip';
+import { SkeletonRows } from '../primitives/Skeleton';
 import { StatusPill } from '../primitives/StatusPill';
 import type { SpaceFilter } from '../../state/types';
 import type { Unit } from '../../lib/types';
@@ -64,10 +65,16 @@ export function SpacesList() {
         </div>
       </div>
       <div className={styles.list}>
-        {filtered.map((u) => (
-          <SpaceRow key={u.id} unit={u} />
-        ))}
-        {filtered.length === 0 && <div className={styles.empty}>No spaces match this filter.</div>}
+        {state.loading ? (
+          <SkeletonRows rows={7} />
+        ) : (
+          <>
+            {filtered.map((u) => (
+              <SpaceRow key={u.id} unit={u} />
+            ))}
+            {filtered.length === 0 && <div className={styles.empty}>No spaces match this filter.</div>}
+          </>
+        )}
         {state.mode === 'edit' && state.unplacedUnits.length > 0 && (
           <>
             <div className={styles.headRow} style={{ marginTop: 10, padding: '0 2px' }}>

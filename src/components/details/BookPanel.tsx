@@ -5,6 +5,7 @@ import { bookedUnitIds, conflictsFor, employeeName, isBookable, unitById } from 
 import { fmtTime } from '../../lib/geometry';
 import { Select } from '../primitives/Select';
 import { Button } from '../primitives/Button';
+import { SkeletonRows } from '../primitives/Skeleton';
 import card from './Card.module.css';
 import styles from './BookPanel.module.css';
 
@@ -109,6 +110,7 @@ function ScheduleList({ unitId }: { unitId: string }) {
   const dayBookings = state.units.length
     ? state.bookings.filter((b) => b.unitId === unitId && b.date === state.date).sort((a, b) => a.start - b.start)
     : [];
+  if (state.loading) return <SkeletonRows rows={3} />;
   if (!dayBookings.length) return <p className={card.helper}>No bookings for this date.</p>;
   return (
     <div className={styles.list}>

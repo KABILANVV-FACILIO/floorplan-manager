@@ -139,6 +139,36 @@ function buildActions(state: AppState, dispatch: Dispatch<Action>, canvasRectRef
     // units/assignments/bookings awaits below leave a gap where the stage would otherwise flash
     // a blank canvas before the skeleton appears. Its finally-block still clears the flag.
     dispatch({ type: 'SET_FLOOR_IMAGE_LOADING', value: true });
+
+    // Fast path (deployed, slug floors = demo/RCU data on the vibe-db tier): every
+    // floorplanApi invocation costs ~1.5-2s regardless of payload, so the four
+    // per-call round-trips (units/assignments/bookings/floorplan file) dominated
+    // the loader time — getFloorData bundles them into ONE. Real numeric org
+    // floors keep the per-call path so the connector tier's spaces still win,
+    // and dev keeps @facilio/api precedence.
+    if (!isFacilioApiConfigured && !/^\d+$/.test(floorId)) {
+      try {
+        const bundle = await dataSource.getFloorData!(floorId, state.date, state.planId);
+        dispatch({
+          type: 'SELECT_FLOOR_DONE',
+          floorId,
+          units: bundle.units,
+          assignments: bundle.assignments,
+          bookings: bundle.bookings,
+        });
+        try {
+          const file = bundle.file ? (JSON.parse(bundle.file) as { dataUrl?: string }) : null;
+          if (file?.dataUrl) dispatch({ type: 'SET_FLOOR_IMAGE', floorId, planId: state.planId, dataUrl: file.dataUrl });
+        } finally {
+          dispatch({ type: 'SET_FLOOR_IMAGE_LOADING', value: false });
+        }
+        return bundle.units;
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.debug('[loadFloor] bundle fast path unavailable, using per-call path', err);
+      }
+    }
+
     const [units, assignments, bookings] = await Promise.all([
       dataSource.getUnits(floorId),
       dataSource.getAssignments(floorId),

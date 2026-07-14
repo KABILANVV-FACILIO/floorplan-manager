@@ -6,6 +6,7 @@ import { TYPE_META } from '../../lib/types';
 import { facilioRecordUrl } from '../../lib/facilioApi';
 import { Select } from '../primitives/Select';
 import { Button } from '../primitives/Button';
+import { SkeletonRows } from '../primitives/Skeleton';
 import card from './Card.module.css';
 import styles from './AssignPanel.module.css';
 
@@ -92,6 +93,7 @@ export function AssignPanel() {
           <p className={styles.dragHint}>Drag a person onto a desk, locker, or parking stall to assign it.</p>
         </div>
         <div className={styles.peopleList}>
+          {state.loading && state.employees.length === 0 && <SkeletonRows rows={6} avatar />}
           {employees.map((emp) => {
             const held = unitsHeldBy(emp.id);
             // Mock demo ids look like "e1".."e14" and have no real record to open — only

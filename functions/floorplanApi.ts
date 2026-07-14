@@ -230,6 +230,38 @@ server.addHandler({
   },
 });
 
+// ---- one-call floor bundle ----
+// Every handler invocation costs ~1.5-2s round-trip regardless of payload
+// (measured via `vibe fn run`), so a floor load's four separate calls
+// (units + assignments + bookings + floorplan file) dominated the loader
+// time. This returns all four in ONE invocation.
+server.addHandler({
+  name: 'getFloorData',
+  description: 'Floor bundle in one call: {units, assignments, bookings, file} for a floor + date (+ plan type file).',
+  parameters: {
+    floorId: { description: 'Floor id', type: 'string' },
+    date: { description: 'ISO date (YYYY-MM-DD) for bookings', type: 'string' },
+    planId: { description: 'Plan type id whose stored floorplan file to include', type: 'string' },
+  },
+  execute: async (args) => {
+    const db = connect();
+    const all = parse(getKV(db, 'app_data', 'units'), []);
+    const units = all.filter((u) => u.floor === args.floorId);
+    const onFloor = {};
+    for (const u of units) onFloor[u.id] = true;
+
+    const assignmentsAll = parse(getKV(db, 'app_data', 'assignments'), {});
+    const assignments = {};
+    for (const unitId of Object.keys(assignmentsAll)) if (onFloor[unitId]) assignments[unitId] = assignmentsAll[unitId];
+
+    const bookingsAll = parse(getKV(db, 'app_data', 'bookings'), []);
+    const bookings = bookingsAll.filter((b) => onFloor[b.unitId] && b.date === args.date);
+
+    const file = args.planId ? getKV(db, 'floorplan_files', fileKey(args.floorId, args.planId)) : null;
+    return { units, assignments, bookings, file };
+  },
+});
+
 // ---- one-time seed of the demo dataset ----
 server.addHandler({
   name: 'seedData',

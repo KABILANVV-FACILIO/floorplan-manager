@@ -21,6 +21,20 @@ export interface FloorplanDataSource {
   vacateUnit(unitId: string): Promise<void>;
   getBookings(floorId: string, date: string): Promise<Booking[]>;
   createBooking(input: Omit<Booking, 'id'>): Promise<Booking>;
+  /**
+   * Optional fast path: everything a floor load needs in ONE backend
+   * round-trip. `file` is the stored floorplan-file JSON string (see
+   * floorplanFileStore) or null. Tiers without it are skipped by the
+   * composite; callers must be prepared to fall back to the per-call path.
+   */
+  getFloorData?(floorId: string, date: string, planId: string): Promise<FloorBundle>;
+}
+
+export interface FloorBundle {
+  units: Unit[];
+  assignments: Assignments;
+  bookings: Booking[];
+  file: string | null;
 }
 
 const LS_KEY = 'facilio_floorplan_proto_v2';
@@ -112,6 +126,15 @@ export class MockDataSource implements FloorplanDataSource {
     const booking: Booking = { ...input, id: 'b' + Date.now() };
     savePersisted({ bookings: [...bookings, booking] });
     return booking;
+  }
+
+  async getFloorData(floorId: string, date: string): Promise<FloorBundle> {
+    const [units, assignments, bookings] = await Promise.all([
+      this.getUnits(floorId),
+      this.getAssignments(floorId),
+      this.getBookings(floorId, date),
+    ]);
+    return { units, assignments, bookings, file: null };
   }
 }
 
@@ -312,6 +335,9 @@ export class VibeDbDataSource implements FloorplanDataSource {
   getEmployees(): Promise<Employee[]> {
     return this.call('getEmployees', {});
   }
+  getFloorData(floorId: string, date: string, planId: string): Promise<FloorBundle> {
+    return this.call('getFloorData', { floorId, date, planId });
+  }
   getUnits(floorId: string): Promise<Unit[]> {
     return this.call('getUnits', { floorId });
   }
@@ -430,6 +456,21 @@ export class CompositeDataSource implements FloorplanDataSource {
   }
   getUnits(floorId: string) {
     return this.run('getUnits', floorId);
+  }
+  /** Fast path across tiers that implement it; callers fall back to the per-call path on throw. */
+  async getFloorData(floorId: string, date: string, planId: string): Promise<FloorBundle> {
+    let lastErr: unknown = new Error('no tier implements getFloorData');
+    for (const tier of this.tiers) {
+      if (!tier.getFloorData) continue;
+      try {
+        return await tier.getFloorData(floorId, date, planId);
+      } catch (err) {
+        lastErr = err;
+        // eslint-disable-next-line no-console
+        console.debug(`[dataSource] getFloorData unavailable on "${tier.name}", falling back`, err);
+      }
+    }
+    throw lastErr;
   }
   saveUnits(floorId: string, units: Unit[]) {
     return this.run('saveUnits', floorId, units);
