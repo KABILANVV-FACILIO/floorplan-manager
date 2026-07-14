@@ -149,6 +149,12 @@ export class ConnectorDataSource implements FloorplanDataSource {
   }
 
   async getUnits(floorId: string): Promise<Unit[]> {
+    // Real Facilio floor ids are numeric; slug ids (RCU import, demo floors)
+    // belong to the mock tier — throw so the composite falls through instead
+    // of this tier answering [] and masking the seeded units.
+    if (!/^\d+$/.test(floorId)) {
+      throw new Error('facilio-cmms: not an org floor id');
+    }
     const res = await vibe.executeAction('facilio-cmms', 'list-spaces', {
       filters: `floor=${floorId}`,
       page_size: 200,
@@ -391,8 +397,33 @@ export class CompositeDataSource implements FloorplanDataSource {
     throw lastErr;
   }
 
-  getPortfolio() {
-    return this.run('getPortfolio');
+  /**
+   * Portfolio is a UNION across tiers, not first-wins: the connected org's
+   * real tree and the seeded test data (RCU import on the mock tier) should
+   * coexist in the picker. Tier order decides precedence on id clashes; a
+   * tier that errors or returns nothing just contributes nothing.
+   */
+  async getPortfolio(): Promise<Site[]> {
+    const merged: Site[] = [];
+    const seen = new Set<string>();
+    let lastErr: unknown;
+    for (const tier of this.tiers) {
+      try {
+        const sites = await tier.getPortfolio();
+        for (const site of sites) {
+          if (!seen.has(site.id)) {
+            seen.add(site.id);
+            merged.push(site);
+          }
+        }
+      } catch (err) {
+        lastErr = err;
+        // eslint-disable-next-line no-console
+        console.debug(`[dataSource] getPortfolio unavailable on "${tier.name}", merging remaining tiers`, err);
+      }
+    }
+    if (merged.length === 0) throw lastErr ?? new Error('no portfolio available');
+    return merged;
   }
   getEmployees() {
     return this.run('getEmployees');
