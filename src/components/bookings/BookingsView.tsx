@@ -71,6 +71,7 @@ export function BookingsView() {
   const [resourceId, setResourceId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [bookingsByDate, setBookingsByDate] = useState<Record<string, Booking[]>>({});
+  const [calLoading, setCalLoading] = useState(true);
 
   const catDef = CATEGORIES.find((c) => c.id === category)!;
 
@@ -105,6 +106,7 @@ export function BookingsView() {
   // through the shared form (which writes to global state, not this local cache) triggers a refetch.
   useEffect(() => {
     let cancelled = false;
+    setCalLoading(true);
     Promise.all(visibleDates.map((d) => dataSource.getBookings(state.floorId, d).catch(() => [] as Booking[]))).then((results) => {
       if (cancelled) return;
       const map: Record<string, Booking[]> = {};
@@ -112,6 +114,7 @@ export function BookingsView() {
         map[d] = results[i];
       });
       setBookingsByDate(map);
+      setCalLoading(false);
     });
     return () => {
       cancelled = true;
@@ -289,6 +292,13 @@ export function BookingsView() {
               </div>
             </div>
 
+            <div className={styles.calArea}>
+              {calLoading && (
+                <div className={styles.calLoading}>
+                  <span className={styles.calSpinner} />
+                  Loading bookings…
+                </div>
+              )}
             {layout === 'grid' ? (
               <ResourceGrid
                 resources={resources.filter((r) => !search || r.label.toLowerCase().includes(search.toLowerCase()))}
@@ -322,6 +332,7 @@ export function BookingsView() {
                 employeeNameOf={(id) => employeeName(state, id)}
               />
             )}
+            </div>
           </>
         )}
       </div>
@@ -367,6 +378,13 @@ function CalendarGrid({ dates, bookingsFor, myId, snap, onCreate, onCancel, empl
   const scrollRef = useRef<HTMLDivElement>(null);
   const [drag, setDrag] = useState<{ date: string; from: number; to: number } | null>(null);
   const dragRef = useRef<{ date: string; colTop: number; from: number; to: number } | null>(null);
+  // Live "now" — ticks each minute so the current-time line stays accurate
+  // while the view sits open (it was computed once at render before).
+  const [now, setNow] = useState(nowMinutes());
+  useEffect(() => {
+    const t = setInterval(() => setNow(nowMinutes()), 60_000);
+    return () => clearInterval(t);
+  }, []);
 
   // Start scrolled near the working day (07:00) rather than 06:00.
   useEffect(() => {
@@ -410,7 +428,6 @@ function CalendarGrid({ dates, bookingsFor, myId, snap, onCreate, onCancel, empl
   }
 
   const todayIso = toISO(new Date());
-  const now = nowMinutes();
 
   return (
     <div className={styles.calWrap}>
@@ -478,6 +495,7 @@ function CalendarGrid({ dates, bookingsFor, myId, snap, onCreate, onCancel, empl
                 {isToday && now >= DAY_START && now <= DAY_END && (
                   <div className={styles.nowLine} style={{ top: (now - DAY_START) * PX_PER_MIN }}>
                     <span className={styles.nowDot} />
+                    <span className={styles.nowLabel}>{fmtTime(now)}</span>
                   </div>
                 )}
               </div>
@@ -526,10 +544,15 @@ function MonthGrid({
             <button key={d} className={[styles.monthCell, inMonth ? '' : styles.monthCellDim].join(' ')} onClick={() => onPickDay(d)}>
               <span className={[styles.monthDate, isToday ? styles.monthDateToday : ''].join(' ')}>{dt.getDate()}</span>
               <div className={styles.monthBars}>
-                {blocks.slice(0, 3).map((b) => (
-                  <span key={b.id} className={styles.monthBar}>{fmtTime(b.start)}</span>
-                ))}
-                {blocks.length > 3 && <span className={styles.monthMore}>+{blocks.length - 3}</span>}
+                {[...blocks]
+                  .sort((a, b) => a.start - b.start)
+                  .slice(0, 3)
+                  .map((b) => (
+                    <span key={b.id} className={styles.monthBar}>
+                      {fmtTime(b.start)}
+                    </span>
+                  ))}
+                {blocks.length > 3 && <span className={styles.monthMore}>+{blocks.length - 3} more</span>}
               </div>
             </button>
           );

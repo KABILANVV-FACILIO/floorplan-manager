@@ -9,7 +9,7 @@
   max-width: 1360px;
   margin: 0 auto;
   /* Extra bottom padding clears the floating bottom nav bar. */
-  padding: 26px 28px 104px;
+  padding: 16px 28px 96px;
   display: flex;
   flex-direction: column;
   min-height: 100%;
@@ -38,15 +38,19 @@
   font-weight: 600;
 }
 .h1 {
-  font: 700 26px/1.2 var(--font-sans);
+  font: 700 20px/1.2 var(--font-sans);
   color: var(--ink-900);
   letter-spacing: -0.01em;
   margin: 0;
 }
+/* Subtitle removed from the layout — it only ate vertical space above the
+   calendar; kept in the DOM as sr-only for context. */
 .sub {
-  font-size: 13.5px;
-  color: var(--ink-600);
-  margin: 4px 0 0;
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
 }
 .myBookings {
   display: inline-flex;
@@ -86,17 +90,17 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  margin-top: 18px;
+  gap: 12px;
+  margin-top: 12px;
   flex-wrap: wrap;
 }
 .catTabs {
   display: flex;
-  gap: 8px;
+  gap: 6px;
 }
 .catTab {
-  height: 38px;
-  padding: 0 18px;
+  height: 34px;
+  padding: 0 14px;
   border-radius: var(--radius-lg);
   border: 1px solid var(--ink-200);
   background: #fff;
@@ -161,9 +165,57 @@
 .calToolbar {
   display: flex;
   align-items: center;
-  gap: 14px;
-  margin-top: 14px;
+  gap: 10px;
+  margin-top: 10px;
   padding-bottom: 10px;
+  flex-wrap: wrap;
+}
+
+/* Calendar area wraps the scroll grid + a loading overlay. */
+.calArea {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  animation: calFade 0.25s ease;
+}
+@keyframes calFade {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.calLoading {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background: rgba(255, 255, 255, 0.6);
+  backdrop-filter: blur(1px);
+  font: 500 13px/1 var(--font-sans);
+  color: var(--ink-600);
+  border-radius: var(--radius-lg);
+}
+.calSpinner {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid var(--ink-200);
+  border-top-color: var(--blue-500);
+  animation: calSpin 0.8s linear infinite;
+}
+@keyframes calSpin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 .viewSeg {
   display: inline-flex;
@@ -264,6 +316,10 @@
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  /* Breathing room so the first (06:00) and last (22:00) hour labels —
+     absolutely positioned at the calBody edges — aren't clipped by the
+     scroll boundary. Was the "timing hidden at top and bottom" bug. */
+  padding: 12px 0 16px;
 }
 .calBody {
   display: flex;
@@ -303,6 +359,18 @@
   overflow: hidden;
   cursor: pointer;
   z-index: 2;
+  animation: blockIn 0.22s cubic-bezier(0.2, 0, 0, 1);
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+@keyframes blockIn {
+  from {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 .blockMine {
   background: var(--blue-500);
@@ -310,6 +378,8 @@
 }
 .blockMine:hover {
   background: var(--blue-600);
+  transform: translateY(-1px);
+  box-shadow: 0 3px 8px rgba(0, 89, 214, 0.3);
 }
 .blockOther {
   background: var(--danger-050);
@@ -363,6 +433,18 @@
   height: 8px;
   border-radius: 50%;
   background: var(--danger-500);
+  box-shadow: 0 0 0 3px rgba(182, 25, 25, 0.18);
+}
+.nowLabel {
+  position: absolute;
+  left: 6px;
+  top: -8px;
+  font: 700 9px/1 var(--font-sans);
+  color: #fff;
+  background: var(--danger-500);
+  border-radius: 3px;
+  padding: 2px 4px;
+  letter-spacing: 0.02em;
 }
 
 /* ---- Month ---- */
