@@ -240,57 +240,99 @@
 .slotPicker {
   margin-top: 8px;
   background: #fff;
-  border-radius: 10px;
+  border-radius: 12px;
   padding: 8px;
   display: flex;
   flex-direction: column;
-  gap: 7px;
-}
-.slotDateRow {
-  display: flex;
-  align-items: center;
   gap: 8px;
+  box-shadow: 0 1px 3px rgba(16, 24, 40, 0.08);
 }
-.dateInput {
-  flex: 1;
-  min-width: 0;
-  height: 34px;
-  border: 1px solid var(--ink-200);
-  border-radius: var(--radius-lg);
-  padding: 0 8px;
-  font: 600 13px/1 var(--font-sans);
-  color: var(--ink-900);
-  background: #fff;
-  outline: none;
-}
-.slotTimeRow {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-}
-.timeFieldLabel {
-  font: 600 8px/1 var(--font-sans);
+.slotFieldLabel {
+  font: 700 8px/1 var(--font-sans);
   color: var(--ink-400);
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  margin-bottom: 3px;
 }
-.timeFieldBtn {
-  width: 100%;
-  height: 34px;
+
+/* Date field — formatted value with the native picker overlaid invisibly. */
+.slotDateField {
+  position: relative;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 10px;
+  height: 46px;
+  padding: 0 12px;
   border: 1px solid var(--ink-200);
-  border-radius: var(--radius-lg);
-  padding: 0 10px;
-  font: 700 14px/1 var(--font-sans);
-  color: var(--ink-900);
-  background: #fff;
+  border-radius: 10px;
+  background: var(--ink-050);
   cursor: pointer;
+}
+.slotDateText {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.slotDateValue {
+  font: 600 13.5px/1 var(--font-sans);
+  color: var(--ink-900);
+}
+.slotDateNative {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  border: none;
+  cursor: pointer;
+}
+
+/* Start → End row with a duration chip. */
+.slotTimeRow {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+}
+.slotArrow {
+  flex-shrink: 0;
+  align-self: center;
+}
+.timeFieldBtn {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 3px;
+  height: 46px;
+  border: 1px solid var(--ink-200);
+  border-radius: 10px;
+  padding: 0 12px;
+  background: var(--ink-050);
+  cursor: pointer;
+}
+.timeFieldValue {
+  font: 700 15px/1 var(--font-sans);
+  color: var(--ink-900);
 }
 .timeFieldBtnActive {
   border-color: var(--blue-500);
+  background: var(--blue-025);
+  box-shadow: 0 0 0 2px var(--blue-100);
+}
+.slotDuration {
+  flex-shrink: 0;
+  align-self: center;
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: var(--blue-050);
+  color: var(--blue-700);
+  font: 700 11px/1 var(--font-sans);
 }
 
 .body {

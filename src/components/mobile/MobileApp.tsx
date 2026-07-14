@@ -129,16 +129,30 @@ export function MobileApp({ mode, onClose }: MobileAppProps) {
 
             {state.mobileTab === 'book' && (
               <div className={styles.slotPicker}>
-                <div className={styles.slotDateRow}>
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--ink-500)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <label className={styles.slotDateField}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--blue-500)" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
                     <rect x="3" y="4" width="18" height="17" rx="2" />
                     <path d="M16 2v4M8 2v4M3 10h18" />
                   </svg>
-                  <input className={styles.dateInput} type="date" value={state.date} onChange={(e) => actions.setDate(e.target.value)} />
-                </div>
+                  <div className={styles.slotDateText}>
+                    <span className={styles.slotFieldLabel}>Date</span>
+                    <span className={styles.slotDateValue}>
+                      {new Date(state.date).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}
+                    </span>
+                  </div>
+                  {/* native picker sits invisibly over the field and drives the tap */}
+                  <input className={styles.slotDateNative} type="date" value={state.date} onChange={(e) => actions.setDate(e.target.value)} />
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--ink-400)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M6 9l6 6 6-6" />
+                  </svg>
+                </label>
                 <div className={styles.slotTimeRow}>
                   <TimeField label="Start" value={state.start} active={state.mobTimePick === 'start'} onClick={() => actions.setMobTimePick(state.mobTimePick === 'start' ? null : 'start')} />
+                  <svg className={styles.slotArrow} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--ink-400)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M5 12h14M13 6l6 6-6 6" />
+                  </svg>
                   <TimeField label="End" value={state.end} active={state.mobTimePick === 'end'} onClick={() => actions.setMobTimePick(state.mobTimePick === 'end' ? null : 'end')} />
+                  <span className={styles.slotDuration}>{fmtDuration(state.end - state.start)}</span>
                 </div>
               </div>
             )}
@@ -435,16 +449,19 @@ function MobileMap({
 
 function TimeField({ label, value, active, onClick }: { label: string; value: number; active: boolean; onClick: () => void }) {
   return (
-    <div style={{ flex: 1, minWidth: 0 }}>
-      <div className={styles.timeFieldLabel}>{label}</div>
-      <button className={[styles.timeFieldBtn, active ? styles.timeFieldBtnActive : ''].join(' ')} onClick={onClick}>
-        <span>{fmtTime(value)}</span>
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--ink-500)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M6 9l6 6 6-6" />
-        </svg>
-      </button>
-    </div>
+    <button className={[styles.timeFieldBtn, active ? styles.timeFieldBtnActive : ''].join(' ')} onClick={onClick}>
+      <span className={styles.slotFieldLabel}>{label}</span>
+      <span className={styles.timeFieldValue}>{fmtTime(value)}</span>
+    </button>
   );
+}
+
+/** "1h", "1h 30m", "45m" for the booking-window duration chip. */
+function fmtDuration(mins: number): string {
+  if (mins <= 0) return '0m';
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return [h ? `${h}h` : '', m ? `${m}m` : ''].filter(Boolean).join(' ') || '0m';
 }
 
 // Matches the web RoomPolygon fills exactly (keyed on the mobile tab, which
