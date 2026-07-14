@@ -386,14 +386,25 @@ function CalendarGrid({ dates, bookingsFor, myId, snap, onCreate, onCancel, empl
     return () => clearInterval(t);
   }, []);
 
-  // Start scrolled near the working day (07:00) rather than 06:00.
+  const todayIso = toISO(new Date());
+  const todayVisible = dates.includes(todayIso);
+  // The grid spans the working day, but expands to include the current hour
+  // when today is on screen — so the now-line always has a real place, even
+  // early morning or late evening (before it was clamped to 06:00–22:00 and
+  // simply vanished outside those hours).
+  const dayStart = todayVisible ? Math.min(DAY_START, Math.floor(now / 60) * 60) : DAY_START;
+  const dayEnd = todayVisible ? Math.max(DAY_END, Math.ceil((now + 1) / 60) * 60) : DAY_END;
+  const gridHeight = ((dayEnd - dayStart) / 60) * PX_PER_HOUR;
+
+  // Start scrolled near the working day (07:00).
   useEffect(() => {
-    if (scrollRef.current) scrollRef.current.scrollTop = (7 * 60 - DAY_START) * PX_PER_MIN;
+    if (scrollRef.current) scrollRef.current.scrollTop = Math.max(0, (7 * 60 - dayStart) * PX_PER_MIN);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   function yToMin(colTop: number, clientY: number): number {
-    const raw = (clientY - colTop) / PX_PER_MIN + DAY_START;
-    return Math.max(DAY_START, Math.min(DAY_END, Math.round(raw / snap) * snap));
+    const raw = (clientY - colTop) / PX_PER_MIN + dayStart;
+    return Math.max(dayStart, Math.min(dayEnd, Math.round(raw / snap) * snap));
   }
 
   function onColMouseDown(date: string, e: ReactMouseEvent) {
@@ -427,8 +438,6 @@ function CalendarGrid({ dates, bookingsFor, myId, snap, onCreate, onCancel, empl
     }
   }
 
-  const todayIso = toISO(new Date());
-
   return (
     <div className={styles.calWrap}>
       <div className={styles.dayHeaderRow}>
@@ -444,10 +453,10 @@ function CalendarGrid({ dates, bookingsFor, myId, snap, onCreate, onCancel, empl
         })}
       </div>
       <div className={styles.calScroll} ref={scrollRef}>
-        <div className={styles.calBody} style={{ height: GRID_HEIGHT }}>
+        <div className={styles.calBody} style={{ height: gridHeight }}>
           <div className={styles.gutter}>
-            {Array.from({ length: (DAY_END - DAY_START) / 60 + 1 }, (_, i) => {
-              const min = DAY_START + i * 60;
+            {Array.from({ length: (dayEnd - dayStart) / 60 + 1 }, (_, i) => {
+              const min = dayStart + i * 60;
               return (
                 <div key={min} className={styles.hourLabel} style={{ top: i * PX_PER_HOUR }}>
                   {min % 60 === 0 ? formatHour(min) : ''}
@@ -460,12 +469,12 @@ function CalendarGrid({ dates, bookingsFor, myId, snap, onCreate, onCancel, empl
             const blocks = bookingsFor(d);
             return (
               <div key={d} className={styles.dayCol} onMouseDown={(e) => onColMouseDown(d, e)}>
-                {Array.from({ length: (DAY_END - DAY_START) / 60 }, (_, i) => (
+                {Array.from({ length: (dayEnd - dayStart) / 60 }, (_, i) => (
                   <div key={i} className={styles.hourCell} style={{ top: (i + 1) * PX_PER_HOUR }} />
                 ))}
                 {blocks.map((b) => {
-                  const top = (Math.max(DAY_START, b.start) - DAY_START) * PX_PER_MIN;
-                  const height = Math.max(16, (Math.min(DAY_END, b.end) - Math.max(DAY_START, b.start)) * PX_PER_MIN);
+                  const top = (Math.max(dayStart, b.start) - dayStart) * PX_PER_MIN;
+                  const height = Math.max(16, (Math.min(dayEnd, b.end) - Math.max(dayStart, b.start)) * PX_PER_MIN);
                   const mine = b.by === myId;
                   return (
                     <div
@@ -485,15 +494,15 @@ function CalendarGrid({ dates, bookingsFor, myId, snap, onCreate, onCancel, empl
                   <div
                     className={styles.selBlock}
                     style={{
-                      top: (Math.min(drag.from, drag.to) - DAY_START) * PX_PER_MIN,
+                      top: (Math.min(drag.from, drag.to) - dayStart) * PX_PER_MIN,
                       height: Math.max(2, Math.abs(drag.to - drag.from) * PX_PER_MIN),
                     }}
                   >
                     <span className={styles.selLabel}>{fmtTime(Math.min(drag.from, drag.to))} - {fmtTime(Math.max(drag.from, drag.to))}</span>
                   </div>
                 )}
-                {isToday && now >= DAY_START && now <= DAY_END && (
-                  <div className={styles.nowLine} style={{ top: (now - DAY_START) * PX_PER_MIN }}>
+                {isToday && (
+                  <div className={styles.nowLine} style={{ top: (now - dayStart) * PX_PER_MIN }}>
                     <span className={styles.nowDot} />
                     <span className={styles.nowLabel}>{fmtTime(now)}</span>
                   </div>

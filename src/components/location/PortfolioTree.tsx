@@ -53,7 +53,6 @@ export function PortfolioTree() {
         // known for it (uploaded this session, or listed from the vibe-db file store at boot) —
         // without the OR, a freshly-uploaded floor kept reading "no plan" in this tree.
         const hasPlan = !!floor.hasPlan || !!state.floorsWithPlans[floor.id];
-        const count = hasPlan ? state.units.filter((u) => u.floor === floor.id).length : 0;
         items.push({
           id: floor.id,
           name: floor.name,
@@ -62,7 +61,10 @@ export function PortfolioTree() {
           hasChildren: false,
           expanded: false,
           active: state.floorId === floor.id,
-          badge: hasPlan ? `${floor.id === state.floorId ? state.units.length : count} units` : 'no plan',
+          // No unit count: only the current floor's units are loaded, so every
+          // other floor would read a misleading "0 units". "no plan" stays —
+          // it's known from the portfolio flag regardless of what's loaded.
+          badge: hasPlan ? null : 'no plan',
           drillIn: hasPlan,
           onClick: () => {
             actions.selectFloor(floor.id);
