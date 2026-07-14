@@ -171,6 +171,7 @@
   cursor: pointer;
 }
 .qrBtn {
+  position: relative;
   flex-shrink: 0;
   display: inline-flex;
   align-items: center;
@@ -185,6 +186,21 @@
 }
 .qrBtn:active {
   background: rgba(255, 255, 255, 0.3);
+}
+.iconBadge {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--danger-500);
+  color: #fff;
+  font: 700 9px/1 var(--font-sans);
+  box-shadow: 0 0 0 1.5px var(--blue-600);
 }
 .locateBtn:hover {
   background: rgba(255, 255, 255, 0.28);

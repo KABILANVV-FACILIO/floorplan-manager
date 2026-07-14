@@ -10,6 +10,7 @@ import { MobileUnitSheet } from './MobileUnitSheet';
 import { MobileTimePicker } from './MobileTimePicker';
 import { MobileQrScanner } from './MobileQrScanner';
 import { MobileSpacesSheet } from './MobileSpacesSheet';
+import { MobileMyBookings } from './MobileMyBookings';
 import { FloorplanSkeleton } from '../canvas/FloorplanSkeleton';
 import { markerStyle } from '../../lib/unitStatus';
 import { employeeName, myAssignedUnit } from '../../state/selectors';
@@ -29,6 +30,8 @@ export function MobileApp({ mode, onClose }: MobileAppProps) {
   const myUnit = myAssignedUnit(state);
   const [qrOpen, setQrOpen] = useState(false);
   const [spacesOpen, setSpacesOpen] = useState(false);
+  const [myBookingsOpen, setMyBookingsOpen] = useState(false);
+  const myBookingsCount = state.bookings.filter((b) => b.by === state.bookBy).length;
 
   const rooms = state.units.filter((u) => u.type === 'room' && u.geom.kind === 'poly');
   const markers = state.units.filter((u) => u.type !== 'room' && u.geom.kind === 'point');
@@ -97,6 +100,14 @@ export function MobileApp({ mode, onClose }: MobileAppProps) {
               ) : (
                 <span className={styles.dateStatic}>{new Date(state.date).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}</span>
               )}
+              <button className={styles.qrBtn} onClick={() => setMyBookingsOpen(true)} title="My bookings" aria-label="My bookings">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="3" y="4" width="18" height="17" rx="2" />
+                  <path d="M16 2v4M8 2v4M3 10h18" />
+                  <path d="M8 15l3 3 5-6" />
+                </svg>
+                {myBookingsCount > 0 && <span className={styles.iconBadge}>{myBookingsCount}</span>}
+              </button>
               <button className={styles.qrBtn} onClick={() => setQrOpen(true)} title="Scan a space QR" aria-label="Scan a space QR">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
                   <rect x="3" y="3" width="7" height="7" rx="1" />
@@ -155,6 +166,7 @@ export function MobileApp({ mode, onClose }: MobileAppProps) {
           <MobileFloorPicker />
           <MobileUnitSheet />
           <MobileSpacesSheet open={spacesOpen} onClose={() => setSpacesOpen(false)} />
+          <MobileMyBookings open={myBookingsOpen} onClose={() => setMyBookingsOpen(false)} />
           {qrOpen && <MobileQrScanner onClose={() => setQrOpen(false)} />}
         </div>
       </div>
