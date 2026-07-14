@@ -14,6 +14,7 @@ import { MobileMyBookings } from './MobileMyBookings';
 import { MobileDatePicker } from './MobileDatePicker';
 import { FloorplanSkeleton } from '../canvas/FloorplanSkeleton';
 import { markerStyle } from '../../lib/unitStatus';
+import { MARKER_ICONS } from '../canvas/markerIcons';
 import { employeeName, myAssignedUnit } from '../../state/selectors';
 import { floorImageKey } from '../../lib/types';
 import type { Unit } from '../../lib/types';
@@ -413,7 +414,8 @@ function MobileMap({
                   boxShadow: selected ? '0 0 0 3px rgba(0,89,214,0.35)' : 'var(--shadow-xs)',
                 }}
               >
-                {ms.occText ?? ''}
+                {/* initials when assigned, otherwise the type/amenity glyph */}
+                {ms.occText ?? (ms.icon ? MARKER_ICONS[ms.icon] : null)}
               </span>
               {showLabel && (
                 <span className={styles.markerLabel}>
