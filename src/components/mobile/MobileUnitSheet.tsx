@@ -4,6 +4,7 @@ import { employeeName, initials, isAssignable, isBookable, unitById } from '../.
 import { unitStatus } from '../../lib/unitStatus';
 import { fmtTime } from '../../lib/geometry';
 import { TYPE_META } from '../../lib/types';
+import { useSheetDrag } from './useSheetDrag';
 import styles from './MobileUnitSheet.module.css';
 
 /** Cap the rendered rows — the RCU directory is 1,400+ people; search narrows. */
@@ -13,6 +14,11 @@ export function MobileUnitSheet() {
   const { state, actions } = useFloorplan();
   const unit = unitById(state, state.mobSel);
   const [empQuery, setEmpQuery] = useState('');
+  const sheetRef = useSheetDrag(() => {
+    actions.setMobSel(null);
+    actions.setMobAssignEdit(false);
+    setEmpQuery('');
+  }, !!unit);
 
   const empId = unit ? state.assignments[unit.id] : undefined;
   const showBookTab = state.mobileTab === 'book';
@@ -43,7 +49,7 @@ export function MobileUnitSheet() {
   return (
     <>
       <div className={styles.backdrop} onClick={close} />
-      <div className={[styles.sheet, picking ? styles.sheetTall : ''].join(' ')}>
+      <div ref={sheetRef} className={[styles.sheet, picking ? styles.sheetTall : ''].join(' ')}>
         <div className={styles.handle} />
         <div className={styles.headRow}>
           <div className={styles.headText}>

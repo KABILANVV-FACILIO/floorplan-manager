@@ -353,12 +353,20 @@
   position: absolute;
   left: 10px;
   bottom: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   font: 600 11px/1 var(--font-sans);
   color: var(--ink-700);
   background: rgba(255, 255, 255, 0.92);
   border: 1px solid var(--ink-200);
   border-radius: 999px;
-  padding: 5px 10px;
+  padding: 7px 11px;
+  cursor: pointer;
+  box-shadow: 0 1px 4px rgba(40, 54, 72, 0.12);
+}
+.countPill:active {
+  background: var(--ink-050);
 }
 .legend {
   position: absolute;

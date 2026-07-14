@@ -9,6 +9,7 @@ import { MobileFloorPicker } from './MobileFloorPicker';
 import { MobileUnitSheet } from './MobileUnitSheet';
 import { MobileTimePicker } from './MobileTimePicker';
 import { MobileQrScanner } from './MobileQrScanner';
+import { MobileSpacesSheet } from './MobileSpacesSheet';
 import { FloorplanSkeleton } from '../canvas/FloorplanSkeleton';
 import { unitStatus } from '../../lib/unitStatus';
 import { employeeName, initials, myAssignedUnit } from '../../state/selectors';
@@ -27,6 +28,7 @@ export function MobileApp({ mode, onClose }: MobileAppProps) {
   const hasPlan = !!meta?.floor.hasPlan;
   const myUnit = myAssignedUnit(state);
   const [qrOpen, setQrOpen] = useState(false);
+  const [spacesOpen, setSpacesOpen] = useState(false);
 
   const rooms = state.units.filter((u) => u.type === 'room' && u.geom.kind === 'poly');
   const markers = state.units.filter((u) => u.type !== 'room' && u.geom.kind === 'point');
@@ -137,7 +139,7 @@ export function MobileApp({ mode, onClose }: MobileAppProps) {
                 <FloorplanSkeleton />
               </div>
             ) : hasPlan ? (
-              <MobileMap rooms={rooms} markers={markers} legend={legend} />
+              <MobileMap rooms={rooms} markers={markers} legend={legend} onOpenSpaces={() => setSpacesOpen(true)} />
             ) : (
               <div className={styles.noPlan}>
                 <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="var(--ink-300)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -152,6 +154,7 @@ export function MobileApp({ mode, onClose }: MobileAppProps) {
           <MobileTimePicker />
           <MobileFloorPicker />
           <MobileUnitSheet />
+          <MobileSpacesSheet open={spacesOpen} onClose={() => setSpacesOpen(false)} />
           {qrOpen && <MobileQrScanner onClose={() => setQrOpen(false)} />}
         </div>
       </div>
@@ -165,7 +168,17 @@ export function MobileApp({ mode, onClose }: MobileAppProps) {
  * see the rest). Supports one-finger drag to pan, two-finger pinch to zoom, double-tap to
  * toggle zoom, mouse-drag/wheel (for the desktop viewport preview), and +/- buttons.
  */
-function MobileMap({ rooms, markers, legend }: { rooms: Unit[]; markers: Unit[]; legend: { label: string; color: string }[] }) {
+function MobileMap({
+  rooms,
+  markers,
+  legend,
+  onOpenSpaces,
+}: {
+  rooms: Unit[];
+  markers: Unit[];
+  legend: { label: string; color: string }[];
+  onOpenSpaces: () => void;
+}) {
   const { state, actions } = useFloorplan();
   const wrapRef = useRef<HTMLDivElement>(null);
   const [view, setView] = useState<ViewTransform | null>(null);
@@ -378,7 +391,12 @@ function MobileMap({ rooms, markers, legend }: { rooms: Unit[]; markers: Unit[];
         })}
       </div>
 
-      <span className={styles.countPill}>{markers.length} spaces · tap a pin</span>
+      <button className={styles.countPill} onClick={onOpenSpaces}>
+        {markers.length + rooms.length} spaces
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M18 15l-6-6-6 6" />
+        </svg>
+      </button>
       <div className={styles.legend}>
         {legend.map((l) => (
           <span key={l.label} className={styles.legendChip}>

@@ -8,10 +8,14 @@
   font-family: var(--font-sans);
 }
 .mobileRoot {
-  position: relative;
-  height: 100vh;
+  /* fixed lock (not just overflow:hidden): iOS Safari can still rubber-band
+     a plain block container, which dragged the whole page with sheet pulls */
+  position: fixed;
+  inset: 0;
   height: 100dvh;
   overflow: hidden;
+  overscroll-behavior: none;
+  touch-action: manipulation;
   font-family: var(--font-sans);
 }
 .loading {

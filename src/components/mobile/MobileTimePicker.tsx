@@ -1,4 +1,5 @@
 import { useFloorplan } from '../../state/FloorplanContext';
+import { useSheetDrag } from './useSheetDrag';
 import styles from './MobileTimePicker.module.css';
 
 function clampMinutes(v: number) {
@@ -7,6 +8,7 @@ function clampMinutes(v: number) {
 
 export function MobileTimePicker() {
   const { state, actions } = useFloorplan();
+  const sheetRef = useSheetDrag(() => actions.setMobTimePick(null), !!state.mobTimePick);
   if (!state.mobTimePick) return null;
 
   const current = state.mobTimePick === 'end' ? state.end : state.start;
@@ -34,7 +36,7 @@ export function MobileTimePicker() {
 
   return (
     <div className={styles.backdrop} onClick={() => actions.setMobTimePick(null)}>
-      <div className={styles.sheet} onClick={(e) => e.stopPropagation()}>
+      <div ref={sheetRef} className={styles.sheet} onClick={(e) => e.stopPropagation()}>
         <div className={styles.title}>{title}</div>
         <div className={styles.row}>
           <Stepper label={hourLabel} onUp={() => adjustPick(60)} onDown={() => adjustPick(-60)} />

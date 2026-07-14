@@ -1,4 +1,5 @@
 import { useFloorplan } from '../../state/FloorplanContext';
+import { useSheetDrag } from './useSheetDrag';
 import styles from './MobileFloorPicker.module.css';
 
 type LevelKind = 'site' | 'building' | 'floor';
@@ -30,6 +31,7 @@ function LevelIcon({ kind }: { kind: LevelKind }) {
 
 export function MobileFloorPicker() {
   const { state, actions } = useFloorplan();
+  const sheetRef = useSheetDrag(() => actions.setMobFloorOpen(false), state.mobFloorOpen);
   if (!state.mobFloorOpen) return null;
 
   const site = state.portfolio.find((s) => s.id === state.mobPickSite);
@@ -82,7 +84,7 @@ export function MobileFloorPicker() {
   return (
     <>
       <div className={styles.backdrop} onClick={() => actions.setMobFloorOpen(false)} />
-      <div className={styles.sheet}>
+      <div ref={sheetRef} className={styles.sheet}>
         <div className={styles.handle} />
         <div className={styles.headRow}>
           {canBack && (
