@@ -17,7 +17,7 @@ import { execFileSync } from 'node:child_process';
 const seed = JSON.parse(readFileSync(new URL('./rcu-seed.json', import.meta.url), 'utf8'));
 
 const DEMO_EMPLOYEES = [
-  { id: 'e1', name: 'Priya Kumar', dept: 'Operations' },
+  { id: 'e1', name: 'Amrithya', dept: 'Operations' },
   { id: 'e2', name: 'Jonas Weber', dept: 'Engineering' },
   { id: 'e3', name: 'Maria Silva', dept: 'Finance' },
   { id: 'e4', name: 'Anna Schmidt', dept: 'HR' },

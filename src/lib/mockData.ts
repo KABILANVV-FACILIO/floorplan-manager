@@ -1,7 +1,7 @@
 import type { Assignments, Booking, Employee, Site, Unit } from './types';
 
 export const EMPLOYEES: Employee[] = [
-  { id: 'e1', name: 'Priya Kumar', dept: 'Operations' },
+  { id: 'e1', name: 'Amrithya', dept: 'Operations' },
   { id: 'e2', name: 'Jonas Weber', dept: 'Engineering' },
   { id: 'e3', name: 'Maria Silva', dept: 'Finance' },
   { id: 'e4', name: 'Anna Schmidt', dept: 'HR' },
