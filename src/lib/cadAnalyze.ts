@@ -1,5 +1,5 @@
 import type { UnitType } from './types';
-import { cadCanvasToLightSnapshot } from './cadPreview';
+import { cadCanvasToLightSnapshot, cadWorkerUrls } from './cadPreview';
 
 /**
  * Opens a DWG/DXF once and produces BOTH the rendered preview snapshot and
@@ -77,11 +77,7 @@ export async function analyzeCadFile(file: File): Promise<CadAnalysis> {
       width: CANVAS_W,
       height: CANVAS_H,
       notLoadDefaultFonts: true,
-      webworkerFileUrls: {
-        dxfParser: '/workers/dxf-parser-worker.js',
-        dwgParser: '/workers/libredwg-parser-worker.js',
-        mtextRender: '/workers/mtext-renderer-worker.js',
-      },
+      webworkerFileUrls: cadWorkerUrls(),
     });
     if (!manager) throw new Error('CAD viewer failed to initialize');
 

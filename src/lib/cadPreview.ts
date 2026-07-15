@@ -1,4 +1,22 @@
 /**
+ * Worker URLs resolved against the app's ACTUAL served location, not the host
+ * root. Hardcoded '/workers/...' broke the connected-app embed: mounted under
+ * a subpath (e.g. …/iwms-floor-plan/), '/workers/x.js' hit the host root and
+ * 404'd, so the CAD engine failed to init → "Could not render this CAD file".
+ * `import.meta.env.BASE_URL` ('./' with our base config) resolved against the
+ * document base yields the right path wherever the app is mounted.
+ */
+export function cadWorkerUrls() {
+  const base = import.meta.env.BASE_URL || './';
+  const at = (name: string) => new URL(`${base}workers/${name}`, document.baseURI).href;
+  return {
+    dxfParser: at('dxf-parser-worker.js'),
+    dwgParser: at('libredwg-parser-worker.js'),
+    mtextRender: at('mtext-renderer-worker.js'),
+  };
+}
+
+/**
  * Renders a DWG/DXF file to a PNG data URL using @mlightcad/cad-simple-viewer
  * (a pure client-side, WASM-backed CAD parser/renderer — no server round-trip).
  * The heavy parser bundle (~13MB for DWG via LibreDWG) is only fetched lazily,
@@ -26,11 +44,7 @@ export async function renderCadToDataUrl(file: File): Promise<string> {
       // fetch failing (e.g. no network access to cdn.jsdelivr.net) was throwing an uncaught
       // error during initialization.
       notLoadDefaultFonts: true,
-      webworkerFileUrls: {
-        dxfParser: '/workers/dxf-parser-worker.js',
-        dwgParser: '/workers/libredwg-parser-worker.js',
-        mtextRender: '/workers/mtext-renderer-worker.js',
-      },
+      webworkerFileUrls: cadWorkerUrls(),
     });
     if (!manager) throw new Error('CAD viewer failed to initialize');
 
