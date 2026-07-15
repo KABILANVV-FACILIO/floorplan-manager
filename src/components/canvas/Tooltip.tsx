@@ -4,7 +4,7 @@ import { tooltipPlacement, unitCenter } from '../../lib/geometry';
 import { unitStatus } from '../../lib/unitStatus';
 import { StatusPill } from '../primitives/StatusPill';
 import { Button } from '../primitives/Button';
-import { TYPE_META } from '../../lib/types';
+import { AMENITY_META, TYPE_META } from '../../lib/types';
 import styles from './Tooltip.module.css';
 
 export function Tooltip() {
@@ -17,10 +17,25 @@ export function Tooltip() {
   const status = unitStatus(state, unit, (id) => employeeName(state, id));
   const empId = state.assignments[unit.id];
 
-  const primaryLabel = unit.type === 'workstation' ? 'Desk' : TYPE_META[unit.type].name;
+  // Amenity/asset markers are informational — no booking/assignment concept,
+  // so they skip the status pill, action buttons, and any mode notes.
+  const isAmenity = unit.type === 'amenity';
+  const isAsset = isAmenity && !!unit.assetId;
+
+  const primaryLabel = isAsset
+    ? 'Asset'
+    : isAmenity
+      ? unit.icon
+        ? AMENITY_META[unit.icon].name
+        : 'Amenity'
+      : unit.type === 'workstation'
+        ? 'Desk'
+        : TYPE_META[unit.type].name;
   const primary = unit.label;
-  const secondaryLabel = unit.secondary ? 'Seat type' : 'Type';
-  const secondary = unit.secondary || [TYPE_META[unit.type].name, unit.room].filter(Boolean).join(' · ');
+  const secondaryLabel = isAmenity ? 'Details' : unit.secondary ? 'Seat type' : 'Type';
+  const secondary = isAmenity
+    ? unit.secondary || (unit.icon ? AMENITY_META[unit.icon].name : 'Marker')
+    : unit.secondary || [TYPE_META[unit.type].name, unit.room].filter(Boolean).join(' · ');
 
   const bookable = isBookable(unit);
   const assignable = isAssignable(unit);
@@ -48,12 +63,16 @@ export function Tooltip() {
         <div className={styles.eyebrow}>{secondaryLabel}</div>
         <div className={styles.value}>{secondary}</div>
       </div>
-      {unit.type === 'workstation' && unit.room && (
+      {(unit.type === 'workstation' || isAmenity) && unit.room && (
         <div className={styles.section}>
           <div className={styles.eyebrow}>Room</div>
           <div className={styles.value}>{unit.room}</div>
         </div>
       )}
+
+      {/* Everything below is booking/assignment — irrelevant for amenities/assets. */}
+      {!isAmenity && (
+      <>
       <div className={styles.statusRow}>
         <StatusPill label={status.text} bg={status.bg} fg={status.fg} />
       </div>
@@ -91,6 +110,8 @@ export function Tooltip() {
       )}
       {state.mode === 'assign' && !assignable && (
         <div className={styles.note}>Booked in Booking mode, not assigned.</div>
+      )}
+      </>
       )}
 
       <div className={[styles.caret, place.below ? styles.caretBelow : styles.caretAbove].join(' ')} />

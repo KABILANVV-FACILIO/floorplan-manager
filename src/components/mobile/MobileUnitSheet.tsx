@@ -3,7 +3,7 @@ import { useFloorplan } from '../../state/FloorplanContext';
 import { employeeName, initials, isAssignable, isBookable, unitById } from '../../state/selectors';
 import { unitStatus } from '../../lib/unitStatus';
 import { fmtTime } from '../../lib/geometry';
-import { TYPE_META } from '../../lib/types';
+import { AMENITY_META, TYPE_META } from '../../lib/types';
 import { useSheetDrag } from './useSheetDrag';
 import styles from './MobileUnitSheet.module.css';
 
@@ -22,7 +22,9 @@ export function MobileUnitSheet() {
 
   const empId = unit ? state.assignments[unit.id] : undefined;
   const showBookTab = state.mobileTab === 'book';
-  const assignable = unit ? isAssignable(unit) : false;
+  const isAmenity = unit?.type === 'amenity';
+  const isAsset = isAmenity && !!unit?.assetId;
+  const assignable = unit && !isAmenity ? isAssignable(unit) : false;
   // Employee picking expands the sheet to near-full height with its own
   // search — a plain dropdown was unusable against the full directory.
   const picking = !!unit && !showBookTab && assignable && (!empId || state.mobAssignEdit);
@@ -55,16 +57,20 @@ export function MobileUnitSheet() {
           <div className={styles.headText}>
             <div className={styles.name}>{unit.label}</div>
             <div className={styles.kind}>
-              {TYPE_META[unit.type].name}
+              {isAmenity ? (isAsset ? 'Asset' : unit.icon ? AMENITY_META[unit.icon].name : 'Amenity') : TYPE_META[unit.type].name}
               {unit.room ? ` · ${unit.room}` : ''}
             </div>
           </div>
-          <span className={styles.statusPill} style={{ background: status.bg, color: status.fg }}>
-            {status.text}
-          </span>
+          {!isAmenity && (
+            <span className={styles.statusPill} style={{ background: status.bg, color: status.fg }}>
+              {status.text}
+            </span>
+          )}
         </div>
 
-        {showBookTab && bookable && status.key !== 'booked' && (
+        {isAmenity && unit.secondary && <div className={styles.infoBox}>{unit.secondary}</div>}
+
+        {!isAmenity && showBookTab && bookable && status.key !== 'booked' && (
           <button
             className={styles.primaryBtn}
             onClick={() => {
@@ -76,10 +82,10 @@ export function MobileUnitSheet() {
             Book · {fmtTime(state.start)}–{fmtTime(state.end)}
           </button>
         )}
-        {showBookTab && bookable && status.key === 'booked' && <div className={styles.infoBox}>This space is currently booked for the selected time window.</div>}
-        {showBookTab && !bookable && <div className={styles.infoBox}>Lockers are assigned via the Assign tab, not booked.</div>}
+        {!isAmenity && showBookTab && bookable && status.key === 'booked' && <div className={styles.infoBox}>This space is currently booked for the selected time window.</div>}
+        {!isAmenity && showBookTab && !bookable && <div className={styles.infoBox}>Lockers are assigned via the Assign tab, not booked.</div>}
 
-        {!showBookTab && !assignable && <div className={styles.infoBox}>This space is booked in Booking mode, not assigned.</div>}
+        {!isAmenity && !showBookTab && !assignable && <div className={styles.infoBox}>This space is booked in Booking mode, not assigned.</div>}
         {!showBookTab && assignable && empId && !state.mobAssignEdit && (
           <>
             <div className={styles.assignedRow}>

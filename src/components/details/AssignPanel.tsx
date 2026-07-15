@@ -60,7 +60,7 @@ export function AssignPanel() {
 
   return (
     <div className={styles.stack}>
-      {sel && (
+      {sel && sel.type !== 'amenity' && (
         <div className={card.card}>
           <div className={card.cardHead}>
             <h3 className={card.cardTitle}>
@@ -73,6 +73,16 @@ export function AssignPanel() {
             ) : (
               <p className={card.helper}>This space is booked in Booking mode, not assigned.</p>
             )}
+          </div>
+        </div>
+      )}
+      {sel && sel.type === 'amenity' && (
+        <div className={card.card}>
+          <div className={card.cardHead}>
+            <h3 className={card.cardTitle}>{sel.label}</h3>
+          </div>
+          <div className={card.cardBody}>
+            {sel.secondary && <p className={card.helper}>{sel.secondary}</p>}
           </div>
         </div>
       )}
