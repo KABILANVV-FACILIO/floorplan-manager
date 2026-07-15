@@ -567,6 +567,14 @@ function buildActions(state: AppState, dispatch: Dispatch<Action>, canvasRectRef
       dataSource.saveUnits(state.floorId, state.units.filter((x) => x.id !== id));
       if (u) showToast(`${u.label} deleted`);
     },
+    /** Bulk delete (marquee multi-select) — one dispatch + one persist. */
+    deleteUnits: (ids: string[]) => {
+      if (ids.length === 0) return;
+      const set = new Set(ids);
+      dispatch({ type: 'DELETE_UNITS', ids });
+      dataSource.saveUnits(state.floorId, state.units.filter((x) => !set.has(x.id)));
+      showToast(`${ids.length} unit${ids.length === 1 ? '' : 's'} deleted`);
+    },
 
     setEmpSearch: (value: string) => dispatch({ type: 'SET_EMP_SEARCH', value }),
     dragStartEmp: (id: string | null) => dispatch({ type: 'DRAG_START_EMP', id }),

@@ -124,7 +124,13 @@ export function Canvas() {
       } else if (e.key === 'Enter') {
         if (state.mode === 'edit' && state.tool === 'room' && state.draft.length >= 3) actions.closeDraft();
       } else if (e.key === 'Delete' || e.key === 'Backspace') {
-        if (state.mode === 'edit' && state.selected) actions.deleteUnit(state.selected);
+        if (state.mode !== 'edit') return;
+        if (multiSel.size > 0) {
+          actions.deleteUnits([...multiSel]);
+          setMultiSel(new Set());
+        } else if (state.selected) {
+          actions.deleteUnit(state.selected);
+        }
       }
     }
     window.addEventListener('keydown', onKey);
@@ -545,6 +551,28 @@ export function Canvas() {
       )}
 
       <Tooltip />
+
+      {/* Multi-select action bar */}
+      {multiSel.size > 0 && (
+        <div className={styles.multiBar}>
+          <span className={styles.multiCount}>{multiSel.size} selected</span>
+          <button
+            className={styles.multiDelete}
+            onClick={() => {
+              actions.deleteUnits([...multiSel]);
+              setMultiSel(new Set());
+            }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6M10 11v6M14 11v6" />
+            </svg>
+            Delete
+          </button>
+          <button className={styles.multiClear} onClick={() => setMultiSel(new Set())}>
+            Clear
+          </button>
+        </div>
+      )}
 
       {canvasHint && <div className={styles.hint}>{canvasHint}</div>}
 

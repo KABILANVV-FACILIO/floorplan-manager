@@ -156,6 +156,7 @@ export type Action =
   | { type: 'UPDATE_UNIT'; id: string; patch: Partial<Unit> }
   | { type: 'UPDATE_UNITS'; updates: { id: string; patch: Partial<Unit> }[] }
   | { type: 'DELETE_UNIT'; id: string }
+  | { type: 'DELETE_UNITS'; ids: string[] }
   | { type: 'PUSH_DRAFT_POINT'; pt: [number, number] }
   | { type: 'CLEAR_DRAFT' }
   | { type: 'CLOSE_DRAFT'; unit: Unit }
@@ -303,6 +304,26 @@ export function reducer(state: AppState, action: Action): AppState {
         assignments,
         bookings: state.bookings.filter((b) => b.unitId !== action.id),
         selected: state.selected === action.id ? null : state.selected,
+        unsavedChanges: countUnsavedChanges(units, state.savedUnits),
+      };
+    }
+    case 'DELETE_UNITS': {
+      const ids = new Set(action.ids);
+      const assignments = { ...state.assignments };
+      const unplaced = [...state.unplacedUnits];
+      for (const u of state.units) {
+        if (!ids.has(u.id)) continue;
+        delete assignments[u.id];
+        if (u.type !== 'room') unplaced.push(u); // same un-place semantics as single delete
+      }
+      const units = state.units.filter((u) => !ids.has(u.id));
+      return {
+        ...state,
+        units,
+        unplacedUnits: unplaced,
+        assignments,
+        bookings: state.bookings.filter((b) => !ids.has(b.unitId)),
+        selected: state.selected && ids.has(state.selected) ? null : state.selected,
         unsavedChanges: countUnsavedChanges(units, state.savedUnits),
       };
     }

@@ -55,6 +55,33 @@ const TOOLS: { id: EditTool; label: string; icon: ReactNode }[] = [
   },
 ];
 
+/**
+ * A one-off DOM node used as the HTML5 drag image while dragging an asset:
+ * the actual asset marker (violet chip + white glyph) so the cursor carries
+ * the marker, not the list row. Self-removes after the drag starts.
+ */
+function makeAssetDragImage(): HTMLElement {
+  const el = document.createElement('div');
+  Object.assign(el.style, {
+    position: 'fixed',
+    top: '-1000px',
+    left: '-1000px',
+    width: '32px',
+    height: '32px',
+    borderRadius: '8px',
+    background: '#6d5bd0',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    boxShadow: '0 4px 12px rgba(40,54,72,0.35)',
+  } as CSSStyleDeclaration);
+  el.innerHTML =
+    '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8l-9-5-9 5 9 5 9-5zM3 8v8l9 5 9-5V8"/><path d="M12 13v8"/></svg>';
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 0);
+  return el;
+}
+
 const AMENITY_TOOL_ICON: Record<AmenityIcon, ReactNode> = {
   asset: <><path d="M21 8l-9-5-9 5 9 5 9-5zM3 8v8l9 5 9-5V8" /><path d="M12 13v8" /></>,
   fire: <path d="M12 22c4 0 7-2.7 7-7 0-3-2-5.5-3.5-7C14 6 13 4 13 2c-3 2-4.5 4.5-4.5 7C7 8 6 7 5.5 5.5 4.5 8 5 10.5 5 12c0 6 3 10 7 10z" />,
@@ -145,6 +172,7 @@ export function EditPanel() {
                     onDragStart={(e) => {
                       e.dataTransfer.setData('application/x-floorplan-asset', a.id);
                       e.dataTransfer.effectAllowed = 'copy';
+                      e.dataTransfer.setDragImage(makeAssetDragImage(), 16, 16);
                     }}
                     title="Drag onto the floorplan to place"
                   >
@@ -292,9 +320,6 @@ export function EditPanel() {
           <p className={card.helper}>
             Placing, editing, and deleting units already saves immediately — the "Save changes" bar above the canvas confirms it explicitly.
           </p>
-          <Button variant="secondary" fullWidth onClick={actions.resetDemo}>
-            Reset demo data
-          </Button>
         </div>
       </div>
     </div>
