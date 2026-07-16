@@ -3,7 +3,7 @@
   height: 100vh;
   height: 100dvh;
   display: flex;
-  background: #eef3f9;
+  background: var(--bg-app);
   overflow: hidden;
   font-family: var(--font-sans);
 }
@@ -23,7 +23,7 @@
   height: 100dvh;
   display: grid;
   place-items: center;
-  background: #eef3f9;
+  background: var(--bg-app);
 }
 .spinner {
   width: 32px;

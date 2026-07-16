@@ -53,7 +53,9 @@
   --info-050: #eaf2ff;
 
   /* Surfaces & borders */
-  --bg-app: #eef3f9;
+  /* Neutral light-grey app canvas — blends with the host's white chrome in the
+     connected-app embed, still contrasts the white floating panels/sheet. */
+  --bg-app: #f3f5f8;
   --bg-surface: #ffffff;
   --bg-surface-alt: var(--ink-050);
   --bg-overlay: rgba(40, 54, 72, 0.48);

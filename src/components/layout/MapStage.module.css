@@ -2,7 +2,11 @@
   flex: 1;
   position: relative;
   min-width: 0;
-  background: radial-gradient(circle, rgba(96, 119, 150, 0.13) 1px, transparent 1.4px) 0 0 / 24px 24px, #eef3f9;
+  /* Soft neutral-grey canvas (was a saturated blue) so the app blends with the
+     host's white chrome when embedded as a connected app, while staying just
+     dark enough that the white panels + floorplan sheet still read as floating.
+     The dot grid is recolored to a faint neutral so it whispers, not shouts. */
+  background: radial-gradient(circle, rgba(100, 116, 139, 0.09) 1px, transparent 1.4px) 0 0 / 24px 24px, var(--bg-app);
   overflow: hidden;
 }
 .resetLayout {

@@ -87,7 +87,7 @@
 .screen {
   height: 100%;
   width: 100%;
-  background: #eef3f9;
+  background: var(--bg-app);
   border-radius: 24px;
   overflow: hidden;
   display: flex;
