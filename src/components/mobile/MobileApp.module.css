@@ -338,7 +338,9 @@
   flex: 1;
   min-height: 220px;
   position: relative;
-  background: #e9eff7;
+  /* Same neutral canvas + faint dot grid as the desktop stage, so the mobile
+     map surface matches the connected-app treatment (was a blue-grey island). */
+  background: radial-gradient(circle, rgba(100, 116, 139, 0.09) 1px, transparent 1.4px) 0 0 / 24px 24px, var(--bg-app);
   border-radius: 12px;
   overflow: hidden;
   border: 1px solid var(--ink-200);
