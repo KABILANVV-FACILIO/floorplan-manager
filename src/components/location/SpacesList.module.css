@@ -1,7 +1,10 @@
 .wrap {
   display: flex;
   flex-direction: column;
-  height: 100%;
+  /* flex:1 (not height:100%): the switcher row above is a sibling in the panel body's
+     column — 100% of the body height overflowed by exactly that row, which made the
+     whole panel scroll instead of just .list below. */
+  flex: 1;
   min-height: 0;
 }
 .head {

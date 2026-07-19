@@ -2,6 +2,24 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
+  flex: 1;
+  min-height: 0;
+}
+.stack > * {
+  flex-shrink: 0;
+}
+/* Everything below the pinned Tools|Markers tab bar scrolls as one region
+   (the asset list still nests its own scroller inside). */
+.scrollArea {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.scrollArea > * {
+  flex-shrink: 0;
 }
 .grid {
   display: grid;

@@ -55,10 +55,19 @@
   color: var(--ink-900);
 }
 
+/* The body itself never scrolls — each panel's content owns its scrolling region
+   (e.g. the spaces/people LIST scrolls under a fixed search bar). The child rule
+   hands the constrained height down so those inner `overflow-y: auto` areas engage. */
 .body {
   flex: 1;
   min-height: 0;
-  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.body > * {
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .iconDock {

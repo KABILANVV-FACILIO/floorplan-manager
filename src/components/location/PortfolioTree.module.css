@@ -1,7 +1,8 @@
 .wrap {
   display: flex;
   flex-direction: column;
-  height: 100%;
+  /* flex:1, same reasoning as SpacesList — leaves room for the switcher row above. */
+  flex: 1;
   min-height: 0;
 }
 .label {

@@ -99,10 +99,12 @@ export function EditPanel() {
           Markers
         </button>
       </div>
-      {tab === 'tools' ? <ToolsTab /> : <MarkersTab />}
-      {state.tool === 'calibrate' && state.calib.length > 0 && <CalibrationCard />}
-      {tab === 'tools' && state.tool === 'asset' && <AssetListCard />}
-      <Inspector />
+      <div className={styles.scrollArea}>
+        {tab === 'tools' ? <ToolsTab /> : <MarkersTab />}
+        {state.tool === 'calibrate' && state.calib.length > 0 && <CalibrationCard />}
+        {tab === 'tools' && state.tool === 'asset' && <AssetListCard />}
+        <Inspector />
+      </div>
     </div>
   );
 }

@@ -36,7 +36,7 @@ export function DetailsPanel() {
         onIconDown={drag.onIconDown}
         onIconClick={drag.onIconClick}
       >
-        <div style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 12, height: '100%', boxSizing: 'border-box' }}>
+        <div style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 12, minHeight: 0, boxSizing: 'border-box' }}>
           {state.mode === 'edit' && <EditPanel />}
           {state.mode === 'assign' && <AssignPanel />}
           {state.mode === 'book' && <BookPanel />}
