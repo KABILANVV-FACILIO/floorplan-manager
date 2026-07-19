@@ -75,15 +75,13 @@ export function MapStage({ stageRef }: { stageRef: RefObject<HTMLDivElement> }) 
         {state.mode === 'edit' && state.unsavedChanges > 0 && (
           <div className={styles.unsavedBar}>
             <span>{state.unsavedChanges} unsaved change{state.unsavedChanges === 1 ? '' : 's'}</span>
-            <Button variant="primary" disabled={state.saving} onClick={actions.saveChanges}>
+            {/* Discard-in-place: revert to the last save and stay in edit mode. */}
+            <button className={styles.unsavedDiscard} onClick={actions.discardChanges}>
+              Discard
+            </button>
+            <button className={styles.unsavedSave} disabled={state.saving} onClick={actions.saveChanges}>
               {state.saving && <ButtonSpinner />}
               {state.saving ? 'Saving…' : 'Save changes'}
-            </Button>
-            {/* Discard-in-place: revert to the last save and stay in edit mode. */}
-            <button className={styles.unsavedDiscard} title="Discard changes" aria-label="Discard changes" onClick={actions.discardChanges}>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round">
-                <path d="M18 6L6 18M6 6l12 12" />
-              </svg>
             </button>
           </div>
         )}

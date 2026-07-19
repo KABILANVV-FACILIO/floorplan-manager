@@ -25,7 +25,23 @@ export function Marker({ unit, invZ, onDragStart }: { unit: Unit; invZ: number; 
     if (draggable) onDragStart?.(unit, e);
   }
 
+  // Edit mode: a tray-record drag of the SAME type may drop onto this marker — the dragged
+  // record replaces this one's (this record moves to "Available to place"). The dragged unit's
+  // type travels as an extra mime suffix because dragover can only read types, not data.
+  const replaceMime = `application/x-floorplan-unit-t-${unit.type}`;
+  function isReplaceDrag(e: ReactDragEvent): boolean {
+    return state.mode === 'edit' && unit.type !== 'room' && e.dataTransfer.types.includes(replaceMime);
+  }
+
   function onDragOver(e: ReactDragEvent) {
+    if (state.mode === 'edit') {
+      if (!isReplaceDrag(e)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      e.dataTransfer.dropEffect = 'move';
+      if (state.dragOverId !== unit.id) actions.dragOverUnit(unit.id);
+      return;
+    }
     if (state.mode !== 'assign') return;
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
@@ -35,6 +51,15 @@ export function Marker({ unit, invZ, onDragStart }: { unit: Unit; invZ: number; 
     if (state.dragOverId === unit.id) actions.dragOverUnit(null);
   }
   function onDrop(e: ReactDragEvent) {
+    if (state.mode === 'edit') {
+      if (!isReplaceDrag(e)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      actions.dragOverUnit(null);
+      const unitId = e.dataTransfer.getData('application/x-floorplan-unit');
+      if (unitId && unitId !== unit.id) actions.placeUnitOnUnit(unitId, unit.id);
+      return;
+    }
     if (state.mode !== 'assign') return;
     e.preventDefault();
     const empId = state.dragEmpId || e.dataTransfer.getData('text/plain');
@@ -94,8 +119,14 @@ export function Marker({ unit, invZ, onDragStart }: { unit: Unit; invZ: number; 
         }}
       >
         {isHighlighted && <div className={styles.wave} />}
-        {style.occText && <span style={{ font: '700 9px/1 var(--font-sans)' }}>{style.occText}</span>}
-        {!style.occText && style.icon && ICONS[style.icon]}
+        {style.img ? (
+          <img src={style.img} alt="" draggable={false} style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 'inherit', pointerEvents: 'none' }} />
+        ) : (
+          <>
+            {style.occText && <span style={{ font: '700 9px/1 var(--font-sans)' }}>{style.occText}</span>}
+            {!style.occText && style.icon && ICONS[style.icon]}
+          </>
+        )}
       </div>
       {/* Primary name label ABOVE the marker (hidden when the "Your desk"
           pill already sits above it, to avoid stacking two labels). */}

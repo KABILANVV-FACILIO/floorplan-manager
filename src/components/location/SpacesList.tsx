@@ -128,29 +128,54 @@ function SpaceRow({ unit, unplaced }: { unit: Unit; unplaced?: boolean }) {
   // Only the unplaced records drag onto the canvas (edit mode); placed markers are moved on the
   // canvas itself. The drag ghost is the type logo, not the row (see setTypeDragImage).
   const draggable = !!unplaced && unit.type !== 'room';
+  // Click-to-arm alternative to dragging: arm the record, then click the plan to place it.
+  const placing = state.placingUnitId === unit.id;
   return (
     <div
       className={styles.row}
-      style={unplaced ? { borderStyle: 'dashed' } : undefined}
+      style={
+        unplaced
+          ? placing
+            ? { borderStyle: 'dashed', borderColor: 'var(--blue-300)', background: 'var(--blue-025)' }
+            : { borderStyle: 'dashed' }
+          : undefined
+      }
       draggable={draggable}
       onDragStart={
         draggable
           ? (e) => {
               e.dataTransfer.setData('application/x-floorplan-unit', unit.id);
+              // Type-suffixed duplicate so marker dragover handlers can type-check the drag
+              // (dragover exposes types only, never data).
+              e.dataTransfer.setData(`application/x-floorplan-unit-t-${unit.type}`, unit.id);
               e.dataTransfer.effectAllowed = 'move';
               setTypeDragImage(e, unit);
             }
           : undefined
       }
-      onClick={unplaced ? undefined : () => actions.focusUnit(unit.id, state.stage.w, state.stage.h)}
-      title={draggable ? 'Drag onto the floorplan to place' : undefined}
+      onClick={
+        unplaced
+          ? draggable
+            ? () => actions.setPlacingUnit(placing ? null : unit.id)
+            : undefined
+          : () => actions.focusUnit(unit.id, state.stage.w, state.stage.h)
+      }
+      title={draggable ? 'Drag onto the floorplan, or click and then click the map' : undefined}
     >
       <span className={styles.dot} style={{ background: dotColorMap[unit.type] }} />
       <div className={styles.rowText}>
         <div className={styles.rowLabel}>{unit.label}</div>
         <div className={styles.rowSub}>{unit.secondary || [unit.type === 'workstation' ? 'Desk' : unit.type, unit.room].filter(Boolean).join(' · ')}</div>
       </div>
-      {unplaced ? <StatusPill label="Unplaced" bg="var(--ink-050)" fg="var(--ink-600)" /> : <StatusPill label={status.text} bg={status.bg} fg={status.fg} />}
+      {unplaced ? (
+        placing ? (
+          <StatusPill label="Click map" bg="var(--blue-025)" fg="var(--blue-600)" />
+        ) : (
+          <StatusPill label="Unplaced" bg="var(--ink-050)" fg="var(--ink-600)" />
+        )
+      ) : (
+        <StatusPill label={status.text} bg={status.bg} fg={status.fg} />
+      )}
     </div>
   );
 }

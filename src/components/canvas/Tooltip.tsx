@@ -4,7 +4,7 @@ import { tooltipPlacement, unitCenter } from '../../lib/geometry';
 import { unitStatus } from '../../lib/unitStatus';
 import { StatusPill } from '../primitives/StatusPill';
 import { Button } from '../primitives/Button';
-import { AMENITY_META, TYPE_META } from '../../lib/types';
+import { resolveMarkerDef, TYPE_META } from '../../lib/types';
 import styles from './Tooltip.module.css';
 
 export function Tooltip() {
@@ -22,19 +22,18 @@ export function Tooltip() {
   const isAmenity = unit.type === 'amenity';
   const isAsset = isAmenity && !!unit.assetId;
 
+  const markerName = isAmenity && (unit.markerKind || unit.icon) ? resolveMarkerDef(state.customMarkers, unit).name : 'Amenity';
   const primaryLabel = isAsset
     ? 'Asset'
     : isAmenity
-      ? unit.icon
-        ? AMENITY_META[unit.icon].name
-        : 'Amenity'
+      ? markerName
       : unit.type === 'workstation'
         ? 'Desk'
         : TYPE_META[unit.type].name;
   const primary = unit.label;
   const secondaryLabel = isAmenity ? 'Details' : unit.secondary ? 'Seat type' : 'Type';
   const secondary = isAmenity
-    ? unit.secondary || (unit.icon ? AMENITY_META[unit.icon].name : 'Marker')
+    ? unit.secondary || (unit.markerKind || unit.icon ? markerName : 'Marker')
     : unit.secondary || [TYPE_META[unit.type].name, unit.room].filter(Boolean).join(' · ');
 
   const bookable = isBookable(unit);

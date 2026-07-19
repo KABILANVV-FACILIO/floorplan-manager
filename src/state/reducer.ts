@@ -1,5 +1,5 @@
 import { DEFAULT_PERMS, floorImageKey } from '../lib/types';
-import type { Booking, PlanId, Site, Unit } from '../lib/types';
+import type { Booking, MarkerDef, PlanId, Site, Unit } from '../lib/types';
 import { clamp, fitView } from '../lib/geometry';
 import { seedBookings } from '../lib/mockData';
 import { viewFromLocation } from '../lib/routes';
@@ -42,7 +42,8 @@ export function buildInitialState(): AppState {
   return {
     mode: 'assign',
     tool: 'select',
-    amenityIcon: 'asset',
+    markerKind: 'stairs',
+    customMarkers: [],
     // Boot into RCU-CAMPUS › Facility Office Building › Ground Floor.
     floorId: 'rcu-s-rcu-campus-b-facility-office-building-f-ground-floor',
     planId: 'workstation',
@@ -78,6 +79,8 @@ export function buildInitialState(): AppState {
     dataSourceName: null,
 
     selected: null,
+    multiSelected: [],
+    placingUnitId: null,
     highlightUnitId: null,
     draft: [],
     calib: [],
@@ -136,7 +139,11 @@ export type Action =
   | { type: 'SET_MODE'; mode: AppState['mode'] }
   | { type: 'TOGGLE_EDIT' }
   | { type: 'SET_TOOL'; tool: AppState['tool'] }
-  | { type: 'SET_AMENITY_ICON'; icon: AppState['amenityIcon'] }
+  | { type: 'SET_MARKER_KIND'; kind: string }
+  | { type: 'ADD_CUSTOM_MARKER'; def: MarkerDef }
+  | { type: 'SET_MULTI_SELECTED'; ids: string[] }
+  | { type: 'SET_PLACING_UNIT'; id: string | null }
+  | { type: 'REPLACE_UNIT_AT'; unitId: string; targetId: string }
   | { type: 'TOGGLE_NAV' }
   | { type: 'SET_NAV_VIEW'; view: AppState['navView'] }
   | { type: 'TOGGLE_NODE'; id: string }
@@ -216,7 +223,7 @@ export type Action =
   | { type: 'RESET_DEMO'; units: Unit[]; assignments: AppState['assignments']; bookings: Booking[] };
 
 function resetSelectionState(_s: AppState): Partial<AppState> {
-  return { selected: null, draft: [], calib: [], calibLen: '', dragOverId: null, webReassign: null };
+  return { selected: null, multiSelected: [], placingUnitId: null, draft: [], calib: [], calibLen: '', dragOverId: null, webReassign: null };
 }
 
 export function reducer(state: AppState, action: Action): AppState {
@@ -226,9 +233,37 @@ export function reducer(state: AppState, action: Action): AppState {
     case 'TOGGLE_EDIT':
       return { ...state, mode: state.mode === 'edit' ? 'assign' : 'edit', tool: 'select', ...resetSelectionState(state) };
     case 'SET_TOOL':
-      return { ...state, tool: action.tool, draft: [], calib: [], calibLen: '' };
-    case 'SET_AMENITY_ICON':
-      return { ...state, amenityIcon: action.icon, tool: 'amenity' };
+      return { ...state, tool: action.tool, draft: [], calib: [], calibLen: '', placingUnitId: null, multiSelected: [] };
+    case 'SET_MARKER_KIND':
+      // Arming a library marker IS picking the amenity tool for that kind.
+      return { ...state, markerKind: action.kind, tool: 'amenity', placingUnitId: null, multiSelected: [] };
+    case 'ADD_CUSTOM_MARKER':
+      return { ...state, customMarkers: [...state.customMarkers, action.def] };
+    case 'SET_MULTI_SELECTED':
+      return { ...state, multiSelected: action.ids, selected: action.ids.length > 0 ? null : state.selected };
+    case 'SET_PLACING_UNIT':
+      return { ...state, placingUnitId: action.id, ...(action.id ? { tool: 'select' as const } : {}) };
+    // Drop an "Available to place" record (or an already-placed one) onto an existing same-type
+    // marker: the dragged record takes the target's exact spot, and the target's record moves to
+    // the unplaced pool — re-mapping which record sits at a location without re-aiming the point.
+    case 'REPLACE_UNIT_AT': {
+      const target = state.units.find((u) => u.id === action.targetId);
+      if (!target || target.geom.kind !== 'point' || target.type === 'room') return state;
+      const dragged = state.unplacedUnits.find((u) => u.id === action.unitId) ?? state.units.find((u) => u.id === action.unitId);
+      if (!dragged || dragged.id === target.id) return state;
+      const placedDragged: Unit = { ...dragged, geom: { ...target.geom }, room: target.room, floor: state.floorId };
+      const units = state.units.filter((u) => u.id !== action.targetId && u.id !== action.unitId).concat(placedDragged);
+      const unplacedUnits = [...state.unplacedUnits.filter((u) => u.id !== action.unitId), target];
+      return {
+        ...state,
+        units,
+        unplacedUnits,
+        selected: placedDragged.id,
+        multiSelected: [],
+        placingUnitId: null,
+        unsavedChanges: countUnsavedChanges(units, state.savedUnits),
+      };
+    }
     case 'TOGGLE_NAV':
       return { ...state, navOpen: !state.navOpen };
     case 'SET_NAV_VIEW':
@@ -269,7 +304,7 @@ export function reducer(state: AppState, action: Action): AppState {
       return { ...state, portfolio: action.portfolio, employees: action.employees };
 
     case 'SELECT_UNIT':
-      return { ...state, selected: action.id, webReassign: null };
+      return { ...state, selected: action.id, webReassign: null, ...(action.id ? { multiSelected: [] } : {}) };
     case 'HIGHLIGHT_UNIT':
       return { ...state, highlightUnitId: action.id };
     case 'ADD_UNIT': {
@@ -324,6 +359,7 @@ export function reducer(state: AppState, action: Action): AppState {
         assignments,
         bookings: state.bookings.filter((b) => !ids.has(b.unitId)),
         selected: state.selected && ids.has(state.selected) ? null : state.selected,
+        multiSelected: state.multiSelected.filter((id) => !ids.has(id)),
         unsavedChanges: countUnsavedChanges(units, state.savedUnits),
       };
     }
@@ -395,6 +431,7 @@ export function reducer(state: AppState, action: Action): AppState {
         moduleColors: c.moduleColors ?? state.moduleColors,
         slotGranularity: c.slotGranularity ?? state.slotGranularity,
         bookingModule: c.bookingModule ?? state.bookingModule,
+        customMarkers: c.customMarkers ?? state.customMarkers,
       };
     }
     case 'ADD_BOOKING':

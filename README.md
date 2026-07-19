@@ -64,6 +64,32 @@ npm run build
 vibe deploy
 ```
 
+## Floorplan Editor (edit mode)
+
+Edit mode implements the "Floorplan Editor" design (`.design-src/Floorplan Editor.dc.html`):
+
+- **Edit view panel** with **Tools | Markers** tabs: a live active-tool banner (name + hint), a
+  "Work with units" grid (Select `V` / Room / Scale), and an "Add to plan" grid (Desk, Locker,
+  Parking — drag onto the plan or click to arm; Asset opens the asset list).
+- **Marker library** (Markers tab): 9 built-ins (stairs, elevator, restroom, fire extinguisher,
+  first aid, fire exit, printer, pantry, reception) plus **custom markers** (name, 1–2 char chip
+  label, optional image URL, color) created inline and persisted via settings
+  (`customMarkers`). Markers drag onto the plan or click-to-arm, and render as colored chips.
+- **Available to place** tray (Location panel): unplaced records drag onto the plan **or
+  click-to-arm** ("Click map" pill) and place on the next canvas click.
+- **Replace semantics**: dropping a record (tray drag or an on-canvas marker drag) onto an
+  existing marker of the same type gives the dragged record that exact spot; the old record
+  moves back to "Available to place" (green ring shows the drop target).
+- **Inspector card**: single selection (label, desk type, room, area, delete) or marquee
+  multi-selection ("N selected", Delete N). Deleting keeps records — they return to the tray.
+- Dark **save bar** (`N unsaved changes · Discard · Save changes`), Shift+drag marquee,
+  `V`/`Esc`/`Delete` shortcuts.
+
+Deliberately not ported from the design prototype: the mock Facilio top-bar chrome (the app
+gets real chrome from the connected-app host when embedded), and the "empty desk slot"
+(`filled: false`) markers — a placeholder-slot concept with no counterpart in the real
+floorplanmarker data model yet.
+
 ## Known simplifications vs. the original prototype
 
 - **Floorplan background image**: the original referenced a rendered raster PNG that wasn't available to this rebuild (it exceeded the design-tool's file-size cap). Replaced with a generated SVG architectural schematic (`src/components/canvas/FloorplanBackground.tsx`) that follows the same desk/room layout — actually crisper at high zoom than a raster would be. Users can upload a real plan (PNG/JPG/PDF/DWG/DXF) via "Upload floorplan", which replaces it per-floor.

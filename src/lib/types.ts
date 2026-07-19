@@ -14,6 +14,49 @@ export const AMENITY_META: Record<AmenityIcon, { name: string; prefix: string; c
 
 export const AMENITY_ICONS: AmenityIcon[] = ['asset', 'fire', 'stairs', 'elevator', 'restroom'];
 
+/**
+ * A placeable facility-marker definition (Edit view › Markers tab). Built-ins ship with the app;
+ * custom ones are user-created (persisted via settings). Rendering precedence per def:
+ * `img` (photo chip) → `icon` (a MARKER_ICONS glyph key) → `text` (1–2 char label chip).
+ */
+export interface MarkerDef {
+  id: string;
+  name: string;
+  color: string;
+  /** 1–2 character chip label, e.g. "FE" for fire exit. */
+  text?: string;
+  /** Glyph key into MARKER_ICONS (built-ins only). */
+  icon?: AmenityIcon;
+  /** Image URL rendered as a round chip (custom markers). */
+  img?: string;
+}
+
+export const BUILTIN_MARKERS: MarkerDef[] = [
+  { id: 'stairs', name: 'Stairs', color: '#0EA5A5', icon: 'stairs' },
+  { id: 'elevator', name: 'Elevator', color: '#C2761A', icon: 'elevator' },
+  { id: 'restroom', name: 'Restroom', color: '#6D5AE6', icon: 'restroom' },
+  { id: 'fire', name: 'Fire extinguisher', color: '#d64545', icon: 'fire' },
+  { id: 'firstaid', name: 'First aid', color: '#29A01E', text: '+' },
+  { id: 'fireexit', name: 'Fire exit', color: '#B61919', text: 'FE' },
+  { id: 'printer', name: 'Printer', color: '#607796', text: 'PR' },
+  { id: 'coffee', name: 'Pantry', color: '#B5761A', text: 'CF' },
+  { id: 'reception', name: 'Reception', color: '#0059D6', text: 'RC' },
+];
+
+/**
+ * The marker definition a unit renders with. Precedence: explicit markerKind (library id,
+ * built-in or custom) → legacy `icon` (pre-library amenity units) → a grey "?" fallback so a
+ * unit whose custom def was since deleted still renders and stays selectable.
+ */
+export function resolveMarkerDef(customMarkers: MarkerDef[], unit: Pick<Unit, 'markerKind' | 'icon'>): MarkerDef {
+  const kind = unit.markerKind ?? unit.icon;
+  if (kind) {
+    const def = BUILTIN_MARKERS.find((m) => m.id === kind) ?? customMarkers.find((m) => m.id === kind);
+    if (def) return def;
+  }
+  return { id: kind ?? 'unknown', name: 'Marker', color: '#607796', text: '?' };
+}
+
 /** Display name per plan type — shared by the plan-type switcher and the per-type empty state. */
 export const PLAN_TYPE_NAME: Record<PlanId, string> = {
   workstation: 'Workstations',
@@ -84,8 +127,10 @@ export interface Unit {
   plan: PlanId;
   /** Workstations only — see DeskType. Undefined = ASSIGNED. */
   deskType?: DeskType;
-  /** Amenity markers only — which glyph the marker renders. */
+  /** Amenity markers only — which glyph the marker renders (legacy built-in five). */
   icon?: AmenityIcon;
+  /** Amenity markers placed from the marker library — MarkerDef id (built-in or custom). */
+  markerKind?: string;
   /** Asset-associated markers — id of the linked asset (see lib/assets). */
   assetId?: string;
 }

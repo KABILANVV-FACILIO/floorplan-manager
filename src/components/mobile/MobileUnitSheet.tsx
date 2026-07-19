@@ -3,7 +3,7 @@ import { useFloorplan } from '../../state/FloorplanContext';
 import { employeeName, initials, isAssignable, isBookable, unitById } from '../../state/selectors';
 import { unitStatus } from '../../lib/unitStatus';
 import { fmtTime } from '../../lib/geometry';
-import { AMENITY_META, TYPE_META } from '../../lib/types';
+import { resolveMarkerDef, TYPE_META } from '../../lib/types';
 import { useSheetDrag } from './useSheetDrag';
 import styles from './MobileUnitSheet.module.css';
 
@@ -57,7 +57,13 @@ export function MobileUnitSheet() {
           <div className={styles.headText}>
             <div className={styles.name}>{unit.label}</div>
             <div className={styles.kind}>
-              {isAmenity ? (isAsset ? 'Asset' : unit.icon ? AMENITY_META[unit.icon].name : 'Amenity') : TYPE_META[unit.type].name}
+              {isAmenity
+                ? isAsset
+                  ? 'Asset'
+                  : unit.markerKind || unit.icon
+                    ? resolveMarkerDef(state.customMarkers, unit).name
+                    : 'Amenity'
+                : TYPE_META[unit.type].name}
               {unit.room ? ` · ${unit.room}` : ''}
             </div>
           </div>

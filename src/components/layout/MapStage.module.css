@@ -33,35 +33,65 @@
 .topBar > * {
   pointer-events: auto;
 }
+/* Dark "you have unsaved changes" pill (Floorplan Editor design). */
 .unsavedBar {
   display: flex;
   align-items: center;
   gap: 12px;
   padding: 8px 10px 8px 16px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.96);
-  box-shadow: 0 4px 16px rgba(20, 30, 50, 0.16);
-  font-size: 13px;
+  border-radius: 10px;
+  background: var(--ink-900, #0f1c2e);
+  box-shadow: 0 12px 30px rgba(5, 16, 30, 0.3);
+  font-size: 12.5px;
   font-weight: 500;
-  color: var(--ink-700);
+  color: #fff;
   white-space: nowrap;
+  animation: unsaved-slidedown 160ms cubic-bezier(0.2, 0, 0, 1);
+}
+@keyframes unsaved-slidedown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
-/* The ✕ on the unsaved bar — discard edits in place (stay in edit mode). */
+/* Discard edits in place (stay in edit mode). */
 .unsavedDiscard {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 26px;
-  height: 26px;
-  border: none;
-  border-radius: 50%;
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 7px;
   background: transparent;
-  color: var(--ink-500);
+  color: #fff;
+  font: 600 12px/1 var(--font-sans);
   cursor: pointer;
-  transition: background 0.12s ease, color 0.12s ease;
+  transition: background 0.12s ease;
 }
 .unsavedDiscard:hover {
-  background: var(--ink-050);
-  color: var(--danger-500, #b61919);
+  background: rgba(255, 255, 255, 0.1);
+}
+.unsavedSave {
+  height: 32px;
+  padding: 0 14px;
+  border: none;
+  border-radius: 7px;
+  background: var(--blue-500);
+  color: #fff;
+  font: 600 12px/1 var(--font-sans);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: background 0.12s ease;
+}
+.unsavedSave:hover {
+  background: var(--blue-600, #0047ab);
+}
+.unsavedSave:disabled {
+  opacity: 0.7;
+  cursor: default;
 }

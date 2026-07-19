@@ -1,6 +1,6 @@
 import type { AppState } from '../state/types';
 import { conflictsFor, isAssignable, isBookable } from '../state/selectors';
-import { AMENITY_META, STATE_DEFS } from './types';
+import { resolveMarkerDef, STATE_DEFS } from './types';
 import type { Unit } from './types';
 import { fmtTime } from './geometry';
 
@@ -41,32 +41,38 @@ export interface MarkerStyle {
   zIndex: number;
   occText: string | null;
   icon: 'workstation' | 'locker' | 'parking' | 'asset' | 'fire' | 'stairs' | 'elevator' | 'restroom' | null;
+  /** Custom library markers with an image chip render this instead of a glyph/text. */
+  img?: string;
 }
 
 export function markerStyle(state: AppState, unit: Unit, markerScale = 1): MarkerStyle {
   const size = Math.round(24 * markerScale);
   const radius = unit.type === 'parking' ? '999px' : unit.type === 'locker' ? '4px' : '6px';
-  const selected = state.selected === unit.id;
-  const shadow = selected ? '0 0 0 3px rgba(0,89,214,0.28)' : 'var(--shadow-xs)';
-  const zIndex = selected ? 5 : 2;
+  const selected = state.selected === unit.id || state.multiSelected.includes(unit.id);
+  // In edit mode, hovering a compatible drag over a marker rings it green — the drop
+  // will REPLACE this marker's record (see placeUnitOnUnit), not stack a second one.
+  const dropTarget = state.mode === 'edit' && state.dragOverId === unit.id;
+  const shadow = dropTarget ? '0 0 0 4px rgba(41,160,30,0.4)' : selected ? '0 0 0 3px rgba(0,89,214,0.28)' : 'var(--shadow-xs)';
+  const zIndex = dropTarget ? 6 : selected ? 5 : 2;
   const empId = state.assignments[unit.id];
 
-  // Amenity markers are informational in every mode: FILLED with the
-  // amenity's own color (stairs teal, elevator amber, …) with a white glyph,
-  // so the icon reads clearly and the type is obvious by color. Never faded.
+  // Amenity markers are informational in every mode: FILLED with the marker's
+  // own color (stairs teal, elevator amber, …) with a white glyph / short text
+  // label / image chip, so the type is obvious by color. Never faded.
   if (unit.type === 'amenity') {
-    const color = AMENITY_META[unit.icon ?? 'asset'].color;
+    const def = resolveMarkerDef(state.customMarkers, unit);
     return {
-      bg: color,
-      bd: color,
+      bg: def.color,
+      bd: def.color,
       fg: '#fff',
       opacity: 1,
       shadow,
       size,
       radius: '8px',
       zIndex,
-      occText: null,
-      icon: unit.icon ?? 'asset',
+      occText: def.icon || def.img ? null : (def.text ?? '?').slice(0, 2),
+      icon: def.icon ?? null,
+      img: def.img,
     };
   }
 
@@ -138,7 +144,7 @@ function employeeNameFallback(state: AppState, empId: string): string {
 
 export function unitStatus(state: AppState, unit: Unit, employeeName: (id: string) => string): UnitStatus {
   if (unit.type === 'amenity') {
-    const name = unit.icon ? AMENITY_META[unit.icon].name : 'Amenity';
+    const name = unit.markerKind || unit.icon ? resolveMarkerDef(state.customMarkers, unit).name : 'Amenity';
     return { key: 'amenity', text: name, bg: TOKEN.ink100, fg: TOKEN.ink600, dot: 'var(--ink-500)' };
   }
   if (state.mode === 'edit') {

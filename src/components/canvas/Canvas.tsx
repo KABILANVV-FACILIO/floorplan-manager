@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { DragEvent as ReactDragEvent, MouseEvent as ReactMouseEvent } from 'react';
 import { useFloorplan } from '../../state/FloorplanContext';
 import { clamp, polyAreaM2, polygonCentroid, toNorm, unitCenter } from '../../lib/geometry';
@@ -43,10 +43,35 @@ export function Canvas() {
   const panRef = useRef<{ sx: number; sy: number; otx: number; oty: number; moved: boolean } | null>(null);
   const suppressClickRef = useRef(false);
   const dragUnitIdRef = useRef<string | null>(null);
+  const lastDragClientRef = useRef<{ x: number; y: number } | null>(null);
   const [dragPreview, setDragPreview] = useState<{ id: string; x: number; y: number } | null>(null);
   const [editPreview, setEditPreview] = useState<EditPreview>(null);
-  const [multiSel, setMultiSel] = useState<Set<string>>(new Set());
   const [marquee, setMarquee] = useState<{ x1: number; y1: number; x2: number; y2: number } | null>(null);
+  // Write-through mirrors of the gesture-preview state, updated in the SAME tick as the
+  // mousemove (not on render): the mouseup handlers read these and dispatch to the store
+  // AFTER clearing the local preview. Dispatching from inside a setState updater is a
+  // React render-phase violation ("cannot update FloorplanProvider while rendering
+  // Canvas"), and reading render-synced mirrors would drop a gesture whose final
+  // mousemove and mouseup land in the same frame.
+  const dragPreviewRef = useRef<typeof dragPreview>(null);
+  const editPreviewRef = useRef<EditPreview>(null);
+  const marqueeRef = useRef<typeof marquee>(null);
+  const updateDragPreview = (p: typeof dragPreview) => {
+    dragPreviewRef.current = p;
+    setDragPreview(p);
+  };
+  const updateEditPreview = (p: EditPreview) => {
+    editPreviewRef.current = p;
+    setEditPreview(p);
+  };
+  const updateMarquee = (m: typeof marquee) => {
+    marqueeRef.current = m;
+    setMarquee(m);
+  };
+  // Multi-selection lives in app state (the Edit panel's inspector reads it); keep a Set view
+  // locally for the O(1) membership checks the render path does per marker.
+  const multiSel = useMemo(() => new Set(state.multiSelected), [state.multiSelected]);
+  const setMultiSel = (ids: Set<string>) => actions.setMultiSelected([...ids]);
   const gestureRef = useRef<{
     kind: 'room' | 'group' | 'vertex' | 'marquee';
     id?: string;
@@ -61,10 +86,11 @@ export function Canvas() {
   const isDrawTool = state.mode === 'edit' && DRAW_TOOLS.has(state.tool);
   const isEditSelect = state.mode === 'edit' && state.tool === 'select';
 
-  // Multi-selection is meaningless across floors/modes/tools — drop it.
+  // The reducer drops multi-selection on floor/mode/tool switches; the live gesture
+  // preview is render-local, so clear that here.
   useEffect(() => {
-    setMultiSel(new Set());
-    setEditPreview(null);
+    updateEditPreview(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.floorId, state.planId, state.mode, state.tool]);
 
   useEffect(() => {
@@ -127,10 +153,11 @@ export function Canvas() {
         if (state.mode !== 'edit') return;
         if (multiSel.size > 0) {
           actions.deleteUnits([...multiSel]);
-          setMultiSel(new Set());
         } else if (state.selected) {
           actions.deleteUnit(state.selected);
         }
+      } else if ((e.key === 'v' || e.key === 'V') && state.mode === 'edit') {
+        actions.setTool('select');
       }
     }
     window.addEventListener('keydown', onKey);
@@ -154,7 +181,7 @@ export function Canvas() {
       // Shift+drag = marquee multi-select (plain drag stays panning).
       const r = wrapRef.current!.getBoundingClientRect();
       gestureRef.current = { kind: 'marquee', sx: e.clientX, sy: e.clientY };
-      setMarquee({ x1: e.clientX - r.left, y1: e.clientY - r.top, x2: e.clientX - r.left, y2: e.clientY - r.top });
+      updateMarquee({ x1: e.clientX - r.left, y1: e.clientY - r.top, x2: e.clientX - r.left, y2: e.clientY - r.top });
       window.addEventListener('mousemove', onMarqueeMove);
       window.addEventListener('mouseup', onMarqueeUp);
       e.preventDefault();
@@ -184,7 +211,8 @@ export function Canvas() {
 
   function onMarqueeMove(e: MouseEvent) {
     const r = wrapRef.current!.getBoundingClientRect();
-    setMarquee((m) => (m ? { ...m, x2: e.clientX - r.left, y2: e.clientY - r.top } : m));
+    const m = marqueeRef.current;
+    if (m) updateMarquee({ ...m, x2: e.clientX - r.left, y2: e.clientY - r.top });
   }
   function onMarqueeUp(e: MouseEvent) {
     window.removeEventListener('mousemove', onMarqueeMove);
@@ -193,22 +221,21 @@ export function Canvas() {
     suppressClickRef.current = true;
     setTimeout(() => (suppressClickRef.current = false), 0);
     const r = wrapRef.current!.getBoundingClientRect();
-    setMarquee((m) => {
-      if (m) {
-        const a = toNorm(Math.min(m.x1, m.x2) + r.left, Math.min(m.y1, m.y2) + r.top, r, state.view);
-        const b = toNorm(Math.max(m.x1, m.x2) + r.left, Math.max(m.y1, m.y2) + r.top, r, state.view);
-        const hits = state.units
-          .filter((u) => (u.type === 'room' && u.geom.kind === 'poly') || (u.type !== 'room' && u.plan === state.planId))
-          .filter((u) => {
-            const { cx, cy } = unitCenter(u);
-            return cx >= a.x && cx <= b.x && cy >= a.y && cy <= b.y;
-          })
-          .map((u) => u.id);
-        setMultiSel(new Set(hits));
-        if (hits.length > 0) actions.selectUnit(null);
-      }
-      return null;
-    });
+    const m = marqueeRef.current;
+    updateMarquee(null);
+    if (m) {
+      const a = toNorm(Math.min(m.x1, m.x2) + r.left, Math.min(m.y1, m.y2) + r.top, r, state.view);
+      const b = toNorm(Math.max(m.x1, m.x2) + r.left, Math.max(m.y1, m.y2) + r.top, r, state.view);
+      const hits = state.units
+        .filter((u) => (u.type === 'room' && u.geom.kind === 'poly') || (u.type !== 'room' && u.plan === state.planId))
+        .filter((u) => {
+          const { cx, cy } = unitCenter(u);
+          return cx >= a.x && cx <= b.x && cy >= a.y && cy <= b.y;
+        })
+        .map((u) => u.id);
+      setMultiSel(new Set(hits));
+      if (hits.length > 0) actions.selectUnit(null);
+    }
     void e;
   }
 
@@ -232,16 +259,44 @@ export function Canvas() {
     if (!id || !el) return;
     const r = el.getBoundingClientRect();
     const n = toNorm(e.clientX, e.clientY, r, state.view);
-    setDragPreview({ id, x: clamp(n.x, 0, 1), y: clamp(n.y, 0, 1) });
+    lastDragClientRef.current = { x: e.clientX, y: e.clientY };
+    updateDragPreview({ id, x: clamp(n.x, 0, 1), y: clamp(n.y, 0, 1) });
+  }
+  /** Nearest placed same-type point marker within `px` screen pixels of a client position. */
+  function sameTypeMarkerNear(clientX: number, clientY: number, dragged: Unit, px = 18): Unit | null {
+    const el = wrapRef.current;
+    if (!el) return null;
+    const r = el.getBoundingClientRect();
+    let best: Unit | null = null;
+    let bestDist = px;
+    for (const u of state.units) {
+      if (u.id === dragged.id || u.type !== dragged.type || u.geom.kind !== 'point') continue;
+      const sx = r.left + state.view.tx + u.geom.x * IMG_W * state.view.z;
+      const sy = r.top + state.view.ty + u.geom.y * IMG_H * state.view.z;
+      const dist = Math.hypot(sx - clientX, sy - clientY);
+      if (dist < bestDist) {
+        bestDist = dist;
+        best = u;
+      }
+    }
+    return best;
   }
   function onMarkerDragUp() {
     window.removeEventListener('mousemove', onMarkerDragMove);
     window.removeEventListener('mouseup', onMarkerDragUp);
+    const last = lastDragClientRef.current;
+    lastDragClientRef.current = null;
     dragUnitIdRef.current = null;
-    setDragPreview((preview) => {
-      if (preview) actions.updateUnit(preview.id, { geom: { kind: 'point', x: preview.x, y: preview.y } });
-      return null;
-    });
+    const preview = dragPreviewRef.current;
+    updateDragPreview(null);
+    if (preview) {
+      // Released right on top of another marker of the same type → take over that spot
+      // (its record moves to "Available to place") instead of stacking two markers.
+      const dragged = state.units.find((u) => u.id === preview.id);
+      const target = last && dragged ? sameTypeMarkerNear(last.x, last.y, dragged) : null;
+      if (target) actions.placeUnitOnUnit(preview.id, target.id);
+      else actions.updateUnit(preview.id, { geom: { kind: 'point', x: preview.x, y: preview.y } });
+    }
   }
 
   /** Whole-room drag (edit + select): translate every vertex, commit on release. */
@@ -262,7 +317,7 @@ export function Canvas() {
     const g = gestureRef.current;
     if (!g || g.kind !== 'room') return;
     const { dx, dy } = normDelta(e);
-    setEditPreview({ kind: 'room', id: g.id!, dx, dy });
+    updateEditPreview({ kind: 'room', id: g.id!, dx, dy });
   }
   function onRoomDragUp() {
     window.removeEventListener('mousemove', onRoomDragMove);
@@ -270,13 +325,12 @@ export function Canvas() {
     gestureRef.current = null;
     suppressClickRef.current = true;
     setTimeout(() => (suppressClickRef.current = false), 0);
-    setEditPreview((p) => {
-      if (p?.kind === 'room') {
-        const unit = state.units.find((u) => u.id === p.id);
-        if (unit && (p.dx !== 0 || p.dy !== 0)) actions.updateUnit(p.id, { geom: translateGeom(unit.geom, p.dx, p.dy) });
-      }
-      return null;
-    });
+    const p = editPreviewRef.current;
+    updateEditPreview(null);
+    if (p?.kind === 'room') {
+      const unit = state.units.find((u) => u.id === p.id);
+      if (unit && (p.dx !== 0 || p.dy !== 0)) actions.updateUnit(p.id, { geom: translateGeom(unit.geom, p.dx, p.dy) });
+    }
   }
 
   /** Marquee selection moved as one — commits a single bulk update. */
@@ -289,7 +343,7 @@ export function Canvas() {
     const g = gestureRef.current;
     if (!g || g.kind !== 'group') return;
     const { dx, dy } = normDelta(e);
-    setEditPreview({ kind: 'group', dx, dy });
+    updateEditPreview({ kind: 'group', dx, dy });
   }
   function onGroupDragUp() {
     window.removeEventListener('mousemove', onGroupDragMove);
@@ -297,15 +351,14 @@ export function Canvas() {
     gestureRef.current = null;
     suppressClickRef.current = true;
     setTimeout(() => (suppressClickRef.current = false), 0);
-    setEditPreview((p) => {
-      if (p?.kind === 'group' && (p.dx !== 0 || p.dy !== 0)) {
-        const updates = state.units
-          .filter((u) => multiSel.has(u.id))
-          .map((u) => ({ id: u.id, patch: { geom: translateGeom(u.geom, p.dx, p.dy) } }));
-        if (updates.length > 0) actions.updateUnits(updates);
-      }
-      return null;
-    });
+    const p = editPreviewRef.current;
+    updateEditPreview(null);
+    if (p?.kind === 'group' && (p.dx !== 0 || p.dy !== 0)) {
+      const updates = state.units
+        .filter((u) => multiSel.has(u.id))
+        .map((u) => ({ id: u.id, patch: { geom: translateGeom(u.geom, p.dx, p.dy) } }));
+      if (updates.length > 0) actions.updateUnits(updates);
+    }
   }
 
   /** Vertex reshape on the selected room's corner handles. */
@@ -324,7 +377,7 @@ export function Canvas() {
     const pts = g.origPts.map(([x, y], i) =>
       i === g.vertexIndex ? ([clamp(x + dx, 0, 1), clamp(y + dy, 0, 1)] as [number, number]) : ([x, y] as [number, number]),
     );
-    setEditPreview({ kind: 'vertex', id: g.id!, pts });
+    updateEditPreview({ kind: 'vertex', id: g.id!, pts });
   }
   function onVertexDragUp() {
     window.removeEventListener('mousemove', onVertexDragMove);
@@ -332,10 +385,9 @@ export function Canvas() {
     gestureRef.current = null;
     suppressClickRef.current = true;
     setTimeout(() => (suppressClickRef.current = false), 0);
-    setEditPreview((p) => {
-      if (p?.kind === 'vertex') actions.updateUnit(p.id, { geom: { kind: 'poly', pts: p.pts } });
-      return null;
-    });
+    const p = editPreviewRef.current;
+    updateEditPreview(null);
+    if (p?.kind === 'vertex') actions.updateUnit(p.id, { geom: { kind: 'poly', pts: p.pts } });
   }
 
   function onClick(e: ReactMouseEvent) {
@@ -345,9 +397,17 @@ export function Canvas() {
     const r = el.getBoundingClientRect();
     const n = toNorm(e.clientX, e.clientY, r, state.view);
 
+    // An armed "Available to place" record places on this click (edit mode).
+    if (state.mode === 'edit' && state.placingUnitId) {
+      if (n.x < 0 || n.x > 1 || n.y < 0 || n.y > 1) return;
+      actions.placeUnitAt(state.placingUnitId, n.x, n.y);
+      actions.setPlacingUnit(null);
+      return;
+    }
+
     if (!isDrawTool) {
       actions.selectUnit(null);
-      setMultiSel(new Set());
+      if (multiSel.size > 0) setMultiSel(new Set());
       return;
     }
     if (n.x < 0 || n.x > 1 || n.y < 0 || n.y > 1) return;
@@ -368,7 +428,7 @@ export function Canvas() {
       actions.placePoint(state.tool, n.x, n.y);
     }
     if (state.tool === 'amenity') {
-      actions.placeAmenity(state.amenityIcon, n.x, n.y);
+      actions.placeMarker(state.markerKind, n.x, n.y);
     }
   }
 
@@ -383,7 +443,9 @@ export function Canvas() {
     if (
       state.mode === 'edit' &&
       (e.dataTransfer.types.includes('application/x-floorplan-unit') ||
-        e.dataTransfer.types.includes('application/x-floorplan-asset'))
+        e.dataTransfer.types.includes('application/x-floorplan-asset') ||
+        e.dataTransfer.types.includes('application/x-floorplan-marker') ||
+        e.dataTransfer.types.includes('application/x-floorplan-addtool'))
     )
       e.preventDefault();
   }
@@ -393,13 +455,17 @@ export function Canvas() {
     if (!el) return;
     const unitId = e.dataTransfer.getData('application/x-floorplan-unit');
     const assetId = e.dataTransfer.getData('application/x-floorplan-asset');
-    if (!unitId && !assetId) return;
+    const markerKind = e.dataTransfer.getData('application/x-floorplan-marker');
+    const addType = e.dataTransfer.getData('application/x-floorplan-addtool');
+    if (!unitId && !assetId && !markerKind && !addType) return;
     e.preventDefault();
     const r = el.getBoundingClientRect();
     const n = toNorm(e.clientX, e.clientY, r, state.view);
     if (n.x < 0 || n.x > 1 || n.y < 0 || n.y > 1) return;
     if (assetId) actions.placeAssetAt(assetId, n.x, n.y);
-    else actions.placeUnitAt(unitId, n.x, n.y);
+    else if (markerKind) actions.placeMarker(markerKind, n.x, n.y);
+    else if (addType === 'workstation' || addType === 'locker' || addType === 'parking') actions.placePoint(addType, n.x, n.y);
+    else if (unitId) actions.placeUnitAt(unitId, n.x, n.y);
   }
 
   const invZ = (1 / state.view.z).toFixed(4);
@@ -427,7 +493,8 @@ export function Canvas() {
 
   let canvasHint = '';
   if (state.mode === 'edit') {
-    if (state.tool === 'room') canvasHint = state.draft.length === 0 ? 'Click to start a room outline' : 'Click to add points · click the first point (or press Enter) to close';
+    if (state.placingUnitId) canvasHint = 'Click anywhere on the plan to place it · Esc to cancel';
+    else if (state.tool === 'room') canvasHint = state.draft.length === 0 ? 'Click to start a room outline' : 'Click to add points · click the first point (or press Enter) to close';
     else if (state.tool === 'calibrate') canvasHint = state.calib.length === 0 ? 'Click two points a known distance apart' : state.calib.length === 1 ? 'Click the second point' : 'Enter the real-world distance in the panel';
     else if (state.tool !== 'select') canvasHint = 'Click on the plan to place it';
     else if (multiSel.size > 1) canvasHint = `${multiSel.size} selected — drag any of them to move the group · Esc to clear`;
@@ -444,7 +511,7 @@ export function Canvas() {
       onDragOver={onDragOver}
       onDrop={onDrop}
       className={styles.wrap}
-      style={{ cursor: isDrawTool ? 'crosshair' : 'grab' }}
+      style={{ cursor: isDrawTool || (state.mode === 'edit' && state.placingUnitId) ? 'crosshair' : 'grab' }}
     >
       <div
         className={styles.plane}
@@ -551,28 +618,6 @@ export function Canvas() {
       )}
 
       <Tooltip />
-
-      {/* Multi-select action bar */}
-      {multiSel.size > 0 && (
-        <div className={styles.multiBar}>
-          <span className={styles.multiCount}>{multiSel.size} selected</span>
-          <button
-            className={styles.multiDelete}
-            onClick={() => {
-              actions.deleteUnits([...multiSel]);
-              setMultiSel(new Set());
-            }}
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6M10 11v6M14 11v6" />
-            </svg>
-            Delete
-          </button>
-          <button className={styles.multiClear} onClick={() => setMultiSel(new Set())}>
-            Clear
-          </button>
-        </div>
-      )}
 
       {canvasHint && <div className={styles.hint}>{canvasHint}</div>}
 

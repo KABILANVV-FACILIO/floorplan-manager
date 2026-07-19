@@ -1,10 +1,10 @@
 import type {
-  AmenityIcon,
   AppMode,
   Assignments,
   Booking,
   EditTool,
   Employee,
+  MarkerDef,
   PanelsState,
   Perms,
   PlanId,
@@ -21,8 +21,10 @@ export type SpaceFilter = 'all' | UnitType;
 export interface AppState {
   mode: AppMode;
   tool: EditTool;
-  /** Which amenity glyph the 'amenity' edit tool places. */
-  amenityIcon: AmenityIcon;
+  /** Which marker-library entry (MarkerDef id) the 'amenity' edit tool places. */
+  markerKind: string;
+  /** User-created marker-library entries, persisted via settings. */
+  customMarkers: MarkerDef[];
   floorId: string;
   planId: PlanId;
   expanded: Record<string, boolean>;
@@ -67,6 +69,17 @@ export interface AppState {
   dataSourceName: string | null;
 
   selected: string | null;
+  /**
+   * Marquee multi-selection (edit mode). Mutually exclusive with `selected`: picking a single
+   * unit clears this, and a non-empty marquee result clears `selected`. Drives the group-drag
+   * gesture on the canvas and the multi-unit inspector in the Edit panel.
+   */
+  multiSelected: string[];
+  /**
+   * An "Available to place" record armed for click-placement: the next canvas click places
+   * this record there (edit mode). Toggled from the tray row's "Click map" affordance.
+   */
+  placingUnitId: string | null;
   /** Unit to visually pulse for ~2s (e.g. after "My desk" jumps to it) — separate from `selected`, which also opens the info panel. */
   highlightUnitId: string | null;
   draft: [number, number][];

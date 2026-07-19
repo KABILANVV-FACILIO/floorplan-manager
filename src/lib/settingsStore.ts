@@ -1,5 +1,5 @@
 import { vibe } from './vibe';
-import type { Perms } from './types';
+import type { MarkerDef, Perms } from './types';
 import type { AppState } from '../state/types';
 
 /**
@@ -20,6 +20,8 @@ export interface SettingsConfig {
   moduleColors?: Record<string, string>;
   slotGranularity?: number;
   bookingModule?: 'space' | 'facility';
+  /** User-created marker-library entries (Edit view › Markers › New marker). */
+  customMarkers?: MarkerDef[];
 }
 
 const LS_KEY = 'facilio_floorplan_settings_v1';
@@ -33,6 +35,7 @@ export function settingsFromState(state: AppState): SettingsConfig {
     moduleColors: state.moduleColors,
     slotGranularity: state.slotGranularity,
     bookingModule: state.bookingModule,
+    customMarkers: state.customMarkers,
   };
 }
 

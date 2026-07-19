@@ -2,8 +2,8 @@ import { createContext, useContext, useEffect, useMemo, useReducer, useRef } fro
 import type { Dispatch, MutableRefObject, ReactNode } from 'react';
 import { dataSource } from '../lib/dataSource';
 import { PORTFOLIO as MOCK_PORTFOLIO, EMPLOYEES as MOCK_EMPLOYEES, seedBookings, seedUnits, seedAssignments } from '../lib/mockData';
-import { AMENITY_META, floorImageKey, TYPE_META } from '../lib/types';
-import type { AmenityIcon, Booking, PlanId, Role, Site, Unit, UnitType } from '../lib/types';
+import { floorImageKey, resolveMarkerDef, TYPE_META } from '../lib/types';
+import type { AmenityIcon, Booking, MarkerDef, PlanId, Role, Site, Unit, UnitType } from '../lib/types';
 import type { CadGroup } from '../lib/cadAnalyze';
 import { DEMO_ASSETS } from '../lib/assets';
 import { isFacilioApiConfigured } from '../lib/facilioApi';
@@ -246,7 +246,15 @@ function buildActions(state: AppState, dispatch: Dispatch<Action>, canvasRectRef
       void persistUnits(state.floorId, state.savedUnits).catch(() => {});
     },
     setTool: (tool: AppState['tool']) => dispatch({ type: 'SET_TOOL', tool }),
-    setAmenityIcon: (icon: AmenityIcon) => dispatch({ type: 'SET_AMENITY_ICON', icon }),
+    /** Arm the amenity tool with a marker-library entry (built-in or custom). */
+    setMarkerKind: (kind: string) => dispatch({ type: 'SET_MARKER_KIND', kind }),
+    addCustomMarker: (def: MarkerDef) => {
+      dispatch({ type: 'ADD_CUSTOM_MARKER', def });
+      showToast(`Marker “${def.name}” added`);
+    },
+    setMultiSelected: (ids: string[]) => dispatch({ type: 'SET_MULTI_SELECTED', ids }),
+    /** Arm/disarm an "Available to place" record for click-placement on the canvas. */
+    setPlacingUnit: (id: string | null) => dispatch({ type: 'SET_PLACING_UNIT', id }),
     toggleNav: () => dispatch({ type: 'TOGGLE_NAV' }),
     setNavView: (view: AppState['navView']) => dispatch({ type: 'SET_NAV_VIEW', view }),
     toggleNode: (id: string) => dispatch({ type: 'TOGGLE_NODE', id }),
@@ -370,14 +378,18 @@ function buildActions(state: AppState, dispatch: Dispatch<Action>, canvasRectRef
       dataSource.saveUnits(state.floorId, [...state.units, unit]);
       showToast(`${asset.name} placed`);
     },
-    /** Amenity markers place directly (no which-record dialog) with the tool's chosen icon. */
-    placeAmenity: (icon: AmenityIcon, x: number, y: number) => {
-      const count = state.units.filter((u) => u.type === 'amenity' && u.icon === icon).length;
+    /** Library markers place directly (no which-record dialog) with the armed marker kind. */
+    placeMarker: (kind: string, x: number, y: number) => {
+      const def = resolveMarkerDef(state.customMarkers, { markerKind: kind });
+      const count = state.units.filter((u) => u.type === 'amenity' && (u.markerKind ?? u.icon) === kind).length;
       const unit: Unit = {
         id: 'am' + Date.now(),
         type: 'amenity',
-        icon,
-        label: `${AMENITY_META[icon].name}${count > 0 ? ` ${count + 1}` : ''}`,
+        markerKind: kind,
+        // Legacy glyph field doubles as the render key for the built-in five, so older
+        // surfaces (mobile sheet, tooltips) keep naming them without knowing markerKind.
+        ...(def.icon ? { icon: def.icon } : {}),
+        label: `${def.name}${count > 0 ? ` ${count + 1}` : ''}`,
         room: roomLabelAt(state, x, y),
         geom: { kind: 'point', x, y },
         floor: state.floorId,
@@ -388,6 +400,23 @@ function buildActions(state: AppState, dispatch: Dispatch<Action>, canvasRectRef
       dispatch({ type: 'ADD_UNIT', unit });
       dataSource.saveUnits(state.floorId, [...state.units, unit]);
       showToast(`${unit.label} added`);
+    },
+    /**
+     * Drop a record onto an existing same-type marker: the dragged record takes that exact
+     * spot and the record that was there moves to "Available to place".
+     */
+    placeUnitOnUnit: (unitId: string, targetId: string) => {
+      const target = state.units.find((u) => u.id === targetId);
+      const dragged = state.unplacedUnits.find((u) => u.id === unitId) ?? state.units.find((u) => u.id === unitId);
+      if (!target || !dragged || target.geom.kind !== 'point' || target.type === 'room' || dragged.id === target.id) return;
+      if (dragged.type !== target.type) return;
+      dispatch({ type: 'REPLACE_UNIT_AT', unitId, targetId });
+      const placedDragged: Unit = { ...dragged, geom: { ...target.geom }, room: target.room, floor: state.floorId };
+      dataSource.saveUnits(
+        state.floorId,
+        state.units.filter((u) => u.id !== targetId && u.id !== unitId).concat(placedDragged),
+      );
+      showToast(`${dragged.label} replaced ${target.label} — it moved to Available`);
     },
     /** Map dialog: place an EXISTING unplaced record at the pending spot. */
     confirmPlacementExisting: (unitId: string) => {
@@ -946,7 +975,7 @@ export function FloorplanProvider({ children }: { children: ReactNode }) {
     }, 500);
     return () => clearTimeout(saveTimer.current);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state.perms, state.moduleColors, state.slotGranularity, state.bookingModule]);
+  }, [state.perms, state.moduleColors, state.slotGranularity, state.bookingModule, state.customMarkers]);
 
   useEffect(() => {
     if (loadedRef.current) return;
