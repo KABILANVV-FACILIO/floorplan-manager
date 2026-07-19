@@ -4,7 +4,7 @@ import { renderCadToDataUrl } from './cadPreview';
 import { renderPdfToDataUrl } from './pdfPreview';
 import { computeSyntheticGeometry, geometryStringToQuad, quadToGeometryString, quadToLngLat } from './geoReference';
 import type { FloorplanDataSource } from './dataSource';
-import type { Assignments, Booking, Employee, PlanId, PointGeom, Site, Unit } from './types';
+import type { Assignments, Booking, Employee, PlanId, PointGeom, Site, Unit, UnitType } from './types';
 
 /**
  * `fetchOriginal=true` on `v2/files/preview` returns the ORIGINAL uploaded bytes — for a plain
@@ -708,6 +708,158 @@ export interface RealBookingInput {
   noOfAttendees?: number;
   internalAttendees?: string[];
   externalAttendees?: string[];
+  /** The org form the booking was filled through (v2/forms) — stored on the record so backend form rules apply. */
+  formId?: number;
+  /** Values of org-form fields this app doesn't model natively — passed through verbatim. */
+  extras?: Record<string, unknown>;
+}
+
+// ---------------------------------------------------------------------------
+// Org booking forms (v2/forms): the booking modal renders the org's ACTUAL
+// configured form for spacebooking / facilitybooking instead of a hardcoded
+// field list. Forms are per resource type (e.g. default_deskbooking_web_* for
+// desks), so resolution is (module, unit type) -> formId, then a detail fetch
+// for the section fields. Ids are org-specific — never hardcode them.
+// ---------------------------------------------------------------------------
+
+export interface BookingFormFieldMeta {
+  name: string;
+  label: string;
+  required: boolean;
+  /** Facilio displayTypeEnum: TEXTBOX / TEXTAREA / NUMBER / DATETIME / LOOKUP_SIMPLE / MULTI_LOOKUP / … */
+  type: string;
+  /** Lookup target module (people, desks, space, …) when the field is a lookup. */
+  lookupModule?: string;
+  sequence: number;
+}
+
+export interface BookingFormMeta {
+  id: number;
+  name: string;
+  displayName: string;
+  moduleName: 'spacebooking' | 'facilitybooking';
+  fields: BookingFormFieldMeta[];
+}
+
+/** Form-name preferences per module + unit type (system form names follow these patterns). */
+const FORM_NAME_PREFERENCE: Record<'spacebooking' | 'facilitybooking', Partial<Record<UnitType | 'default', RegExp[]>>> = {
+  spacebooking: {
+    workstation: [/deskbooking/i],
+    parking: [/parkingbooking/i],
+    default: [/default_spacebooking/i, /spacebooking/i],
+  },
+  facilitybooking: {
+    workstation: [/hot_desk/i],
+    parking: [/parkingbooking/i],
+    room: [/^space_/i],
+    default: [/default_facilitybooking/i],
+  },
+};
+
+export interface BookingFormSummary {
+  id: number;
+  name: string;
+  displayName: string;
+  hideInList?: boolean | null;
+}
+
+/** The module's default form for a unit type — what the modal auto-selects before any switching. */
+export function pickDefaultBookingForm(forms: BookingFormSummary[], module: 'space' | 'facility', unitType: UnitType): BookingFormSummary | null {
+  if (forms.length === 0) return null;
+  const moduleName = module === 'space' ? 'spacebooking' : 'facilitybooking';
+  const prefs = FORM_NAME_PREFERENCE[moduleName];
+  const patterns = [...(prefs[unitType] ?? []), ...(prefs.default ?? [])];
+  for (const re of patterns) {
+    const hit = forms.find((f) => re.test(f.name ?? ''));
+    if (hit) return hit;
+  }
+  return forms[0];
+}
+
+const bookingFormListCache = new Map<string, Promise<BookingFormSummary[]>>();
+const bookingFormDetailCache = new Map<string, Promise<BookingFormMeta | null>>();
+
+/**
+ * All of the module's forms (`v2/forms?moduleName=`) — the modal's switcher when there's more
+ * than one. Cached per module for the session; resolves [] when unconfigured or on API failure
+ * so the modal can fall back to its built-in field list.
+ */
+export function fetchBookingFormList(module: 'space' | 'facility'): Promise<BookingFormSummary[]> {
+  if (!isFacilioApiConfigured) return Promise.resolve([]);
+  const moduleName = module === 'space' ? 'spacebooking' : 'facilitybooking';
+  let pending = bookingFormListCache.get(moduleName);
+  if (!pending) {
+    // Raw axios (not API.get): v2/forms answers the plain {responseCode, result} envelope.
+    pending = getInstance()
+      .get('v2/forms', { params: { moduleName } })
+      .then((res: { data?: { result?: { forms?: BookingFormSummary[] } } }) => (res.data?.result?.forms ?? []).filter((f) => !f.hideInList))
+      .catch((err: unknown) => {
+        // eslint-disable-next-line no-console
+        console.warn('[facilio-api] booking form list fetch failed', err);
+        bookingFormListCache.delete(moduleName); // transient failure — allow a retry on next open
+        return [];
+      });
+    bookingFormListCache.set(moduleName, pending);
+  }
+  return pending;
+}
+
+/** One form's field layout (`v2/forms/getForm`), cached per form for the session. */
+export function fetchBookingFormById(module: 'space' | 'facility', formId: number): Promise<BookingFormMeta | null> {
+  if (!isFacilioApiConfigured) return Promise.resolve(null);
+  const moduleName = module === 'space' ? 'spacebooking' : 'facilitybooking';
+  const key = `${moduleName}:${formId}`;
+  let pending = bookingFormDetailCache.get(key);
+  if (!pending) {
+    pending = loadBookingFormDetail(module, moduleName, formId).catch((err) => {
+      // eslint-disable-next-line no-console
+      console.warn('[facilio-api] booking form fetch failed', err);
+      bookingFormDetailCache.delete(key); // transient failure — allow a retry on next open
+      return null;
+    });
+    bookingFormDetailCache.set(key, pending);
+  }
+  return pending;
+}
+
+/** Convenience: the default form for a module + unit type, fields included. */
+export async function fetchBookingForm(module: 'space' | 'facility', unitType: UnitType): Promise<BookingFormMeta | null> {
+  const forms = await fetchBookingFormList(module);
+  const chosen = pickDefaultBookingForm(forms, module, unitType);
+  return chosen ? fetchBookingFormById(module, chosen.id) : null;
+}
+
+async function loadBookingFormDetail(module: 'space' | 'facility', moduleName: 'spacebooking' | 'facilitybooking', formId: number): Promise<BookingFormMeta | null> {
+  const detailRes = await getInstance().get('v2/forms/getForm', { params: { formId, moduleName } });
+  const form = detailRes.data?.result?.form;
+  if (!form) {
+    // Detail endpoint came back empty — keep the id usable with the list's naming.
+    const summary = (await fetchBookingFormList(module)).find((f) => f.id === formId);
+    return summary ? { id: summary.id, name: summary.name, displayName: summary.displayName, moduleName, fields: [] } : null;
+  }
+
+  interface RawFormField {
+    displayName?: string;
+    fieldName?: string;
+    required?: boolean;
+    sequenceNumber?: number;
+    displayTypeEnum?: string;
+    field?: { name?: string; displayName?: string; displayTypeEnum?: string; lookupModule?: { name?: string } };
+  }
+  const fields: BookingFormFieldMeta[] = ((form.sections ?? []) as { fields?: RawFormField[] }[])
+    .flatMap((s) => s.fields ?? [])
+    .map((ff) => ({
+      name: ff.field?.name ?? ff.fieldName ?? '',
+      label: ff.displayName ?? ff.field?.displayName ?? '',
+      required: !!ff.required,
+      type: ff.displayTypeEnum ?? ff.field?.displayTypeEnum ?? 'TEXTBOX',
+      lookupModule: ff.field?.lookupModule?.name,
+      sequence: ff.sequenceNumber ?? 0,
+    }))
+    .filter((f) => f.name)
+    .sort((a, b) => a.sequence - b.sequence);
+
+  return { id: form.id, name: form.name, displayName: form.displayName, moduleName, fields };
 }
 
 /** Numeric backend ids only — mock ids like "e1" aren't real employees and are dropped. */
@@ -745,6 +897,10 @@ export async function createRealBooking(unit: Unit, dateISO: string, start: numb
 
   const res = await facilioApi.createRecord<any>('spacebooking', {
     data: {
+      // Unknown org-form fields first, so the mapped fields below always win on collision.
+      ...(input.extras ?? {}),
+      // Route the create through the org form the user filled — backend form rules apply.
+      ...(input.formId ? { formId: input.formId } : {}),
       [lookupField]: { id: ref.recordId },
       parentModuleId,
       bookingStartTime: epochAt(dateISO, start),

@@ -15,11 +15,21 @@ const token = import.meta.env.VITE_FACILIO_TOKEN;
  */
 export const isConnectedApp = import.meta.env.VITE_IS_CONNECTED_APP === 'true';
 
-/** Where the V3 APIs live: same-origin in connected mode (unless explicitly overridden), the configured URL in dev. */
-const baseURL = isConnectedApp ? envBaseURL || `${window.location.origin}/api` : envBaseURL;
+/**
+ * Where the V3 APIs live for absolute-URL needs: same-origin in connected mode (unless
+ * explicitly overridden), the configured URL in dev.
+ */
+const absoluteBaseURL = isConnectedApp ? envBaseURL || `${window.location.origin}/api` : envBaseURL;
+
+/**
+ * What the axios instance actually talks to. In dev the org API is cross-origin and allows no
+ * CORS from localhost, so requests route through the vite dev-server proxy ('/fapi' →
+ * VITE_FACILIO_API_BASE_URL — see vite.config.ts); the bearer header still authenticates.
+ */
+const baseURL = isConnectedApp ? absoluteBaseURL : devMode && envBaseURL ? '/fapi' : envBaseURL;
 
 /** True in connected-app mode (session-cookie auth), or in dev mode with base URL + token set. */
-export const isFacilioApiConfigured = isConnectedApp || (devMode && !!baseURL && !!token);
+export const isFacilioApiConfigured = isConnectedApp || (devMode && !!envBaseURL && !!token);
 
 if (isFacilioApiConfigured) {
   // Same-origin session cookies do the authenticating in connected mode; the bearer header is
@@ -51,7 +61,7 @@ export { API as facilioApi };
  * rather than under the configured API baseURL, so callers building an absolute URL for those
  * need this instead of `baseURL`. In connected mode that's simply the app's own origin.
  */
-export const apiOrigin: string | null = baseURL ? baseURL.replace(/\/api\/?$/, '') : null;
+export const apiOrigin: string | null = absoluteBaseURL ? absoluteBaseURL.replace(/\/api\/?$/, '') : null;
 
 /**
  * Builds a link to a record's summary page in the real Facilio web app (e.g.

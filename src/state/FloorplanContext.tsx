@@ -728,6 +728,10 @@ function buildActions(state: AppState, dispatch: Dispatch<Action>, canvasRectRef
       noOfAttendees: number;
       internalAttendees: string[];
       externalAttendees: string[];
+      /** Org form (v2/forms) the modal rendered — travels onto the real record. */
+      formId?: number;
+      /** Org-form fields the app doesn't model natively (rendered generically). */
+      extras?: Record<string, unknown>;
     }): Promise<boolean> => {
       const unit = unitById(state, form.unitId);
       if (!unit || form.end <= form.start) {
@@ -776,6 +780,8 @@ function buildActions(state: AppState, dispatch: Dispatch<Action>, canvasRectRef
           noOfAttendees: form.noOfAttendees,
           internalAttendees: form.internalAttendees,
           externalAttendees: form.externalAttendees,
+          formId: form.formId,
+          extras: form.extras,
         })
           .then((res) => {
             if (!res.ok) {
