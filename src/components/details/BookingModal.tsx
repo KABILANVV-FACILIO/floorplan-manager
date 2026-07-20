@@ -10,6 +10,7 @@ import type { Employee, UnitType } from '../../lib/types';
 import { Modal, ModalFooter, ModalHeader } from '../primitives/Modal';
 import { Select } from '../primitives/Select';
 import { Button } from '../primitives/Button';
+import { ButtonSpinner } from '../primitives/ButtonSpinner';
 import card from './Card.module.css';
 
 /** Resource-field label per unit type, in space-booking mode (matches the real Facilio forms). */
@@ -480,8 +481,11 @@ function BookingFormInner() {
         )}
       </div>
       <ModalFooter>
-        <Button variant="secondary" onClick={actions.closeBookingForm}>Cancel</Button>
-        <Button variant="primary" disabled={submitting || formLoading} onClick={onSubmit}>Submit Details</Button>
+        <Button variant="secondary" disabled={submitting} onClick={actions.closeBookingForm}>Cancel</Button>
+        <Button variant="primary" disabled={submitting || formLoading} onClick={onSubmit}>
+          {submitting && <ButtonSpinner />}
+          {submitting ? 'Saving…' : 'Submit Details'}
+        </Button>
       </ModalFooter>
     </Modal>
   );
