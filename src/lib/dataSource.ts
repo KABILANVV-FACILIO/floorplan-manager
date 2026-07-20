@@ -339,8 +339,16 @@ export class VibeDbDataSource implements FloorplanDataSource {
     return vibe.executeFunction('floorplanApi', handler, args) as Promise<T>;
   }
 
+  /**
+   * Portfolio is intentionally NOT served from the app's own vibe-db: the site/building/floor
+   * tree is the org's live data, sourced from the Facilio CMMS connector
+   * (ConnectorDataSource, list-sites/-buildings/-floors) instead of a KV blob copied into this
+   * app. Throwing keeps the vibe-db out of the portfolio union so the connector (then mock) is
+   * the source. The vibe-db still owns app-specific data the connector doesn't wire — units,
+   * assignments, bookings, employees.
+   */
   getPortfolio(): Promise<Site[]> {
-    return this.call('getPortfolio', {});
+    return Promise.reject(new Error('vibe-db: portfolio comes from the CMMS connector, not the app db'));
   }
   getEmployees(): Promise<Employee[]> {
     return this.call('getEmployees', {});
@@ -377,14 +385,19 @@ export class VibeDbDataSource implements FloorplanDataSource {
 
 // The Facilio CMMS connector tier only works when a `facilio-cmms` connection is actually
 // configured for the app; otherwise its `vibe.executeAction` calls 404. It's opt-in via
-// VITE_USE_CONNECTORS so a deployed app without that connection goes straight to the vibe-db
-// tier (the working fallback) instead of spraying connector 404s. Flip it on once the
-// connection exists to get the documented connector-first → vibe-db order.
+// VITE_USE_CONNECTORS (on in .env.production) so the deployed app sources its portfolio from
+// the connector API; a session without that connection has its connector calls 404 and falls
+// through (to mock for portfolio, since the vibe-db no longer serves it).
 const useConnectors = import.meta.env.VITE_USE_CONNECTORS === 'true';
 
 /**
  * Default tier order — the SAME everywhere: real `@facilio/api` → connectors (only when
  * VITE_USE_CONNECTORS is on) → the app's own Vibe DB (the `floorplanApi` function) → mock.
+ *
+ * Portfolio specifically is sourced from the connector, not the vibe-db: the tree is the org's
+ * live data (see VibeDbDataSource.getPortfolio, which throws so it stays out of the portfolio
+ * union). The vibe-db still serves the app-specific data the connector doesn't wire — units,
+ * assignments, bookings, employees.
  *
  * The Vibe DB tier used to be dev-excluded (a plain `npm run dev` session has no runtime, so
  * its calls just 404), but that meant users/space data was api-or-mock only in dev: when the
