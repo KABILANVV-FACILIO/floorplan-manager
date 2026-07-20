@@ -4,10 +4,10 @@ import { useFloorplan } from '../../state/FloorplanContext';
 import { unitById } from '../../state/selectors';
 import { polyAreaM2 } from '../../lib/geometry';
 import { BUILTIN_MARKERS, DESK_TYPES, floorImageKey, TYPE_META } from '../../lib/types';
-import type { DeskType, EditTool, MarkerDef } from '../../lib/types';
-import { DEMO_ASSETS } from '../../lib/assets';
+import type { EditTool, MarkerDef } from '../../lib/types';
 import { MARKER_ICONS } from '../canvas/markerIcons';
 import { Button } from '../primitives/Button';
+import { Picklist } from '../fds/Picklist';
 import card from './Card.module.css';
 import styles from './EditPanel.module.css';
 
@@ -397,19 +397,23 @@ function Inspector() {
               Seat type
             </label>
             <input className={card.input} value={sel.secondary ?? ''} onChange={(e) => actions.updateUnit(sel.id, { secondary: e.target.value })} />
-            <label className={card.label} style={{ marginTop: 10 }}>
-              Desk type
-            </label>
             {/* Real deskType semantics (Context/Workplace_spaceModules.md): ASSIGNED desks are
                 assignment-only; HOT/HOTEL desks are booking-only. Changing this immediately
-                regates the assign/book flows for this marker. */}
-            <select className={card.input} value={sel.deskType ?? 'ASSIGNED'} onChange={(e) => actions.updateUnit(sel.id, { deskType: e.target.value as DeskType })}>
-              {DESK_TYPES.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.name} {t.id === 'ASSIGNED' ? '— assignable, not bookable' : '— bookable, not assignable'}
-                </option>
-              ))}
-            </select>
+                regates the assign/book flows for this marker. FDS Picklist (Canvas-2.dc.html
+                design) replaces the former raw <select>. */}
+            <div style={{ marginTop: 10 }}>
+              <Picklist
+                label="Desk type"
+                value={sel.deskType ?? 'ASSIGNED'}
+                onChange={(v) => actions.updateUnit(sel.id, { deskType: v })}
+                options={DESK_TYPES.map((t) => ({
+                  value: t.id,
+                  label: t.name,
+                  description: t.id === 'ASSIGNED' ? 'Assignable, not bookable' : 'Bookable, not assignable',
+                }))}
+                aria-label="Desk type"
+              />
+            </div>
           </>
         )}
         <div className={card.statRow}>
@@ -509,8 +513,8 @@ function AssetListCard() {
   const placedAssetIds = useMemo(() => new Set(state.units.filter((u) => u.assetId).map((u) => u.assetId)), [state.units]);
   const filteredAssets = useMemo(() => {
     const q = assetQuery.trim().toLowerCase();
-    return DEMO_ASSETS.filter((a) => !q || a.name.toLowerCase().includes(q) || a.category.toLowerCase().includes(q) || a.detail.toLowerCase().includes(q));
-  }, [assetQuery]);
+    return state.assets.filter((a) => !q || a.name.toLowerCase().includes(q) || a.category.toLowerCase().includes(q) || a.detail.toLowerCase().includes(q));
+  }, [assetQuery, state.assets]);
 
   return (
     <div className={card.card}>

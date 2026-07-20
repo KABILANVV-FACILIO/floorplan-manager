@@ -13,6 +13,7 @@ import type {
   Unit,
   UnitType,
 } from '../lib/types';
+import type { Asset } from '../lib/assets';
 import type { ViewTransform } from '../lib/geometry';
 import type { CadGroup } from '../lib/cadAnalyze';
 
@@ -63,6 +64,8 @@ export interface AppState {
   assignments: Assignments;
   bookings: Booking[];
   employees: Employee[];
+  /** Org asset catalog (CMMS connector) — the Edit-mode asset picker's source. */
+  assets: Asset[];
   portfolio: Site[];
   pxPerMeter: number | null;
   loading: boolean;

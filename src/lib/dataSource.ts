@@ -1,5 +1,7 @@
 import { vibe } from './vibe';
 import { EMPLOYEES, PORTFOLIO, seedAssignments, seedBookings, seedUnits } from './mockData';
+import { DEMO_ASSETS } from './assets';
+import type { Asset } from './assets';
 import { FacilioApiDataSource } from './facilioApiDataSource';
 import type { Assignments, Booking, Employee, Site, Unit } from './types';
 
@@ -14,6 +16,8 @@ export interface FloorplanDataSource {
   readonly name: string;
   getPortfolio(): Promise<Site[]>;
   getEmployees(): Promise<Employee[]>;
+  /** Catalog of assets that can be dropped onto a plan (Edit mode asset picker). */
+  getAssets(): Promise<Asset[]>;
   getUnits(floorId: string): Promise<Unit[]>;
   saveUnits(floorId: string, units: Unit[]): Promise<void>;
   getAssignments(floorId: string): Promise<Assignments>;
@@ -78,6 +82,10 @@ export class MockDataSource implements FloorplanDataSource {
 
   async getEmployees(): Promise<Employee[]> {
     return EMPLOYEES;
+  }
+
+  async getAssets(): Promise<Asset[]> {
+    return DEMO_ASSETS;
   }
 
   async getUnits(floorId: string): Promise<Unit[]> {
@@ -152,10 +160,13 @@ export class MockDataSource implements FloorplanDataSource {
  * records ({id, name, ...}), unexpanded ones as bare `{id}` objects, and
  * `filters: "floor=<id>"` server-scopes list-spaces to that one floor.
  *
- * READ-ONLY tier by design: writes fall through to the db/mock tiers. (saveUnits is
- * called on every micro-edit with the full unit list — pushing that through
- * create-space would mint duplicate real records each edit.) No confirmed
- * booking/assignment/employee actions either, so those throw to fall through too.
+ * READS the org's real data via the confirmed list actions: sites/buildings/floors/spaces
+ * (portfolio + per-floor units), `list-employees` (people directory), `list-assets` (Edit-mode
+ * asset catalog). Assignment/booking actions aren't exposed by the connector, so those still
+ * throw to fall through. Writes also fall through: saveUnits is called on every micro-edit with
+ * the full unit list, and pushing that through create-space would mint duplicate real records.
+ * (The connector additionally supports list-work-orders / list-tenants — ready to wire when the
+ * asset→maintenance and tenant features land.)
  */
 export class ConnectorDataSource implements FloorplanDataSource {
   readonly name = 'facilio-cmms';
@@ -174,8 +185,25 @@ export class ConnectorDataSource implements FloorplanDataSource {
   }
 
   async getEmployees(): Promise<Employee[]> {
-    // No confirmed employee-listing action on this connection yet.
-    throw new Error('facilio-cmms: employee directory not wired');
+    // `list-employees` — the org's people directory. Lookup fields (department) return raw ids
+    // unless expanded, so hydrate it; a record may still have no department, which is fine.
+    const res = await vibe.executeAction('facilio-cmms', 'list-employees', {
+      page_size: 200,
+      expand: 'department',
+      select: 'id,name,email,department,designation',
+    });
+    return mapCmmsEmployees(res);
+  }
+
+  async getAssets(): Promise<Asset[]> {
+    // `list-assets` — the org's asset/equipment catalog (Edit-mode asset picker). `category` is a
+    // plain string; `space` is an expanded {id,name} used as the row's location line.
+    const res = await vibe.executeAction('facilio-cmms', 'list-assets', {
+      page_size: 200,
+      expand: 'category,space',
+      select: 'id,name,category,space',
+    });
+    return mapCmmsAssets(res);
   }
 
   async getUnits(floorId: string): Promise<Unit[]> {
@@ -235,6 +263,35 @@ function lookupId(v: unknown): string | null {
 function lookupName(v: unknown): string | null {
   const name = (v as { name?: unknown } | null)?.name;
   return typeof name === 'string' && name ? name : null;
+}
+
+/** A CMMS field that may arrive as a plain string, an expanded {name} lookup, or absent. */
+function stringOrLookupName(v: unknown): string | null {
+  if (typeof v === 'string') return v || null;
+  return lookupName(v);
+}
+
+/** `list-employees` rows → the app's Employee directory ({id, name, dept}). */
+function mapCmmsEmployees(res: unknown): Employee[] {
+  return cmmsRows(res).map((e) => ({
+    id: String(e.id),
+    name: (typeof e.name === 'string' && e.name) || (typeof e.email === 'string' && e.email) || `Employee ${e.id}`,
+    dept: stringOrLookupName(e.department) ?? (typeof e.designation === 'string' ? e.designation : '') ?? '',
+  }));
+}
+
+/** `list-assets` rows → the Edit-mode asset catalog. `space` (expanded) is the location line. */
+function mapCmmsAssets(res: unknown): Asset[] {
+  return cmmsRows(res).map((a) => {
+    const category = stringOrLookupName(a.category) ?? 'Asset';
+    const space = lookupName(a.space);
+    return {
+      id: String(a.id),
+      name: (typeof a.name === 'string' && a.name) || `Asset ${a.id}`,
+      category,
+      detail: space ?? category,
+    };
+  });
 }
 
 /** sites + buildings(expand site) + floors(expand building,site) → the portfolio tree. */
@@ -353,6 +410,10 @@ export class VibeDbDataSource implements FloorplanDataSource {
   getEmployees(): Promise<Employee[]> {
     return this.call('getEmployees', {});
   }
+  getAssets(): Promise<Asset[]> {
+    // Assets are org data — sourced from the CMMS connector, not this app's db.
+    return Promise.reject(new Error('vibe-db: assets come from the CMMS connector'));
+  }
   getFloorData(floorId: string, date: string, planId: string): Promise<FloorBundle> {
     return this.call('getFloorData', { floorId, date, planId });
   }
@@ -450,35 +511,21 @@ export class CompositeDataSource implements FloorplanDataSource {
   }
 
   /**
-   * Portfolio is a UNION across tiers, not first-wins: the connected org's
-   * real tree and the seeded test data (RCU import on the mock tier) should
-   * coexist in the picker. Tier order decides precedence on id clashes; a
-   * tier that errors or returns nothing just contributes nothing.
+   * Portfolio is first-non-empty-wins (NOT a union): the org's real tree — from the CMMS
+   * connector (or @facilio/api) — is authoritative and must stand ALONE. It used to be unioned
+   * with the mock demo sites (HQ Berlin, …), which mixed hardcoded data into a real org's picker;
+   * that mixing is gone. `run()` already treats an empty portfolio as a miss and falls through,
+   * so the first tier with real sites wins and mock only answers when every real tier is
+   * empty/unavailable (offline dev with no backend).
    */
-  async getPortfolio(): Promise<Site[]> {
-    const merged: Site[] = [];
-    const seen = new Set<string>();
-    let lastErr: unknown;
-    for (const tier of this.tiers) {
-      try {
-        const sites = await tier.getPortfolio();
-        for (const site of sites) {
-          if (!seen.has(site.id)) {
-            seen.add(site.id);
-            merged.push(site);
-          }
-        }
-      } catch (err) {
-        lastErr = err;
-        // eslint-disable-next-line no-console
-        console.debug(`[dataSource] getPortfolio unavailable on "${tier.name}", merging remaining tiers`, err);
-      }
-    }
-    if (merged.length === 0) throw lastErr ?? new Error('no portfolio available');
-    return merged;
+  getPortfolio(): Promise<Site[]> {
+    return this.run('getPortfolio');
   }
   getEmployees() {
     return this.run('getEmployees');
+  }
+  getAssets() {
+    return this.run('getAssets');
   }
   getUnits(floorId: string) {
     return this.run('getUnits', floorId);

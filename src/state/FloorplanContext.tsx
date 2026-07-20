@@ -351,7 +351,7 @@ function buildActions(state: AppState, dispatch: Dispatch<Action>, canvasRectRef
     cancelPlacement: () => dispatch({ type: 'SET_PENDING_PLACEMENT', placement: null }),
     /** Place a marker linked to a catalog asset (drag from the Edit asset list). */
     placeAssetAt: (assetId: string, x: number, y: number) => {
-      const asset = DEMO_ASSETS.find((a) => a.id === assetId);
+      const asset = state.assets.find((a) => a.id === assetId);
       if (!asset) return;
       // Don't place the same asset twice — move the existing marker instead.
       const existing = state.units.find((u) => u.type === 'amenity' && u.assetId === assetId);
@@ -987,11 +987,12 @@ export function FloorplanProvider({ children }: { children: ReactNode }) {
     if (loadedRef.current) return;
     loadedRef.current = true;
     (async () => {
-      const [portfolio, employees] = await Promise.all([
+      const [portfolio, employees, assets] = await Promise.all([
         dataSource.getPortfolio().catch(() => MOCK_PORTFOLIO),
         dataSource.getEmployees().catch(() => MOCK_EMPLOYEES),
+        dataSource.getAssets().catch(() => DEMO_ASSETS),
       ]);
-      dispatch({ type: 'PORTFOLIO_LOADED', portfolio, employees });
+      dispatch({ type: 'PORTFOLIO_LOADED', portfolio, employees, assets });
 
       // The mock default floorId ('hqA3') isn't a real floor against the live backend —
       // sending it to per-floor endpoints (getFloorplanDetailsByType) just 500s. Start on the

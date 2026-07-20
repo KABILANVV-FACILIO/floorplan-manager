@@ -4,6 +4,7 @@ import { renderCadToDataUrl } from './cadPreview';
 import { renderPdfToDataUrl } from './pdfPreview';
 import { computeSyntheticGeometry, geometryStringToQuad, quadToGeometryString, quadToLngLat } from './geoReference';
 import type { FloorplanDataSource } from './dataSource';
+import type { Asset } from './assets';
 import type { Assignments, Booking, Employee, PlanId, PointGeom, Site, Unit, UnitType } from './types';
 
 /**
@@ -111,6 +112,12 @@ export class FacilioApiDataSource implements FloorplanDataSource {
       name: e.name,
       dept: e.department?.name ?? e.departmentName ?? '',
     }));
+  }
+
+  async getAssets(): Promise<Asset[]> {
+    // Sourced from the CMMS connector (list-assets); not fetched over @facilio/api. Throw so the
+    // composite falls through to the connector tier.
+    throw new Error('facilio-api: assets come from the CMMS connector, not @facilio/api');
   }
 
   async getUnits(_floorId: string): Promise<Unit[]> {

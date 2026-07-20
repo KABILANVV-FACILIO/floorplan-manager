@@ -73,6 +73,7 @@ export function buildInitialState(): AppState {
     assignments: {},
     bookings: [],
     employees: [],
+    assets: [],
     portfolio: [],
     pxPerMeter: null,
     loading: true,
@@ -155,7 +156,7 @@ export type Action =
   | { type: 'MARK_USER_ZOOMED'; value: boolean }
   | { type: 'SET_SPACE_FILTER'; filter: AppState['spaceFilter'] }
   | { type: 'SET_SPACE_SEARCH'; value: string }
-  | { type: 'PORTFOLIO_LOADED'; portfolio: Site[]; employees: AppState['employees'] }
+  | { type: 'PORTFOLIO_LOADED'; portfolio: Site[]; employees: AppState['employees']; assets: AppState['assets'] }
   | { type: 'SELECT_UNIT'; id: string | null }
   | { type: 'HIGHLIGHT_UNIT'; id: string | null }
   | { type: 'ADD_UNIT'; unit: Unit }
@@ -301,7 +302,7 @@ export function reducer(state: AppState, action: Action): AppState {
     case 'SET_SPACE_SEARCH':
       return { ...state, spaceSearch: action.value };
     case 'PORTFOLIO_LOADED':
-      return { ...state, portfolio: action.portfolio, employees: action.employees };
+      return { ...state, portfolio: action.portfolio, employees: action.employees, assets: action.assets };
 
     case 'SELECT_UNIT':
       return { ...state, selected: action.id, webReassign: null, ...(action.id ? { multiSelected: [] } : {}) };
