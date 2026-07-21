@@ -22,12 +22,13 @@ export interface FloorplanDataSource {
   getUnits(floorId: string): Promise<Unit[]>;
   saveUnits(floorId: string, units: Unit[]): Promise<void>;
   /**
-   * Mint a genuinely-new space record (desk/locker/parking/room). On the connector tier this
-   * is a real `create-space` API write — the org's CMMS gets the record — and the returned Unit
-   * carries the authoritative server id. Lower tiers (vibe-db/mock) just echo the unit back with
-   * its local id so a runtime-less/dev session still works; the on-plan position is persisted
-   * separately by the caller via saveUnits (space records hold no floorplan geometry). Amenities
-   * (assets/markers) are NOT spaces and are rejected by the connector tier.
+   * Mint a genuinely-new record (desk/locker/parking/room). On the connector tier this is a real
+   * facilio-iwms write via the module's dedicated action (create-desks / create-lockers / …) — the
+   * org's IWMS gets the record — and the returned Unit carries the authoritative server id. Lower
+   * tiers (vibe-db/mock) just echo the unit back with its local id so a runtime-less/dev session
+   * still works; the on-plan position is persisted separately by the caller via saveUnits (records
+   * hold no floorplan geometry). Amenities (assets/markers) are NOT IWMS records and are rejected
+   * by the connector tier.
    */
   createUnit(loc: CreateSpaceLoc, unit: Unit): Promise<Unit>;
   getAssignments(floorId: string): Promise<Assignments>;
@@ -61,19 +62,21 @@ export interface CreateSpaceLoc {
   floorId: string;
 }
 
-/** This app's unit type → the Facilio spaceCategory used when creating the record (the reverse of
- *  unitTypeFromSpaceCategory). The org must have these categories configured; otherwise create-space
- *  rejects the value and the write falls through to the local tier. */
-function spaceCategoryForType(type: UnitType): string {
+/** This app's unit type → the dedicated facilio-iwms module create action. Each IWMS module has its
+ *  own create endpoint (V5 /api/v5/desks, /lockers, …), so a desk is created with create-desks, a
+ *  locker with create-lockers, etc. Amenities (assets/markers) aren't IWMS records → null. */
+function iwmsCreateAction(type: UnitType): string | null {
   switch (type) {
     case 'workstation':
-      return 'Desk';
+      return 'create-desks';
     case 'locker':
-      return 'Locker';
+      return 'create-lockers';
     case 'parking':
-      return 'Parking Stall';
+      return 'create-parkings';
+    case 'room':
+      return 'create-rooms';
     default:
-      return 'Room';
+      return null;
   }
 }
 
@@ -290,29 +293,27 @@ export class ConnectorDataSource implements FloorplanDataSource {
   }
 
   /**
-   * Create ONE real space record via `create-space`. This is the write the app was missing: a new
-   * desk/locker/parking/room now becomes an actual row in the org's CMMS (not just a vibe-db blob).
-   * Requires a numeric org floor and a resolved site (create-space's required field). Returns the
-   * unit carrying the server id; the next list-spaces read then surfaces it and rebuilds the mirror.
+   * Create ONE real record via the dedicated facilio-iwms module action (create-desks /
+   * create-lockers / create-parkings / create-rooms) — the write the app was missing: a new
+   * desk/locker/parking/room becomes an actual IWMS record, not just a vibe-db blob. Reads still
+   * come from facilio-cmms; only this write targets the IWMS connector. V5 create convention wraps
+   * the fields under `data`; the response's data.id is the authoritative id. Throws (→ local tier)
+   * when the connector isn't reachable/authorized, so the app still works.
    */
   async createUnit(loc: CreateSpaceLoc, unit: Unit): Promise<Unit> {
-    if (unit.type === 'amenity') {
-      throw new Error('facilio-cmms: amenities/assets are not space records');
+    const action = iwmsCreateAction(unit.type);
+    if (!action) {
+      throw new Error(`facilio-iwms: ${unit.type} is not an IWMS record type`);
     }
     if (!/^\d+$/.test(loc.floorId)) {
-      throw new Error('facilio-cmms: not an org floor id');
+      throw new Error('facilio-iwms: not an org floor id');
     }
-    const space: Record<string, unknown> = {
-      name: unit.label,
-      spaceCategory: spaceCategoryForType(unit.type),
-      moduleState: 'active',
-      floor: Number(loc.floorId),
-    };
-    if (loc.siteId && /^\d+$/.test(loc.siteId)) space.site = Number(loc.siteId);
-    if (loc.buildingId && /^\d+$/.test(loc.buildingId)) space.building = Number(loc.buildingId);
-    const res = await vibe.executeAction('facilio-cmms', 'create-space', { space });
+    const data: Record<string, unknown> = { name: unit.label, floor: Number(loc.floorId) };
+    if (loc.buildingId && /^\d+$/.test(loc.buildingId)) data.building = Number(loc.buildingId);
+    if (loc.siteId && /^\d+$/.test(loc.siteId)) data.site = Number(loc.siteId);
+    const res = await vibe.executeAction('facilio-iwms', action, { data });
     const id = createdSpaceId(res);
-    if (!id) throw new Error('facilio-cmms: create-space returned no id');
+    if (!id) throw new Error(`facilio-iwms: ${action} returned no id`);
     return { ...unit, id, unplaced: false };
   }
 
