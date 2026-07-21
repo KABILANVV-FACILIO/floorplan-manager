@@ -62,19 +62,18 @@ export interface CreateSpaceLoc {
   floorId: string;
 }
 
-/** This app's unit type → the dedicated facilio-iwms module create action. Each IWMS module has its
- *  own create endpoint (V5 /api/v5/desks, /lockers, …), so a desk is created with create-desks, a
- *  locker with create-lockers, etc. Amenities (assets/markers) aren't IWMS records → null. */
+/** This app's unit type → the dedicated facilio-iwms module create action (real slugs confirmed via
+ *  the connector's action catalog — they're SINGULAR, and each takes a `{ body }` payload). IWMS has
+ *  no room-create action (rooms are spaces), so `room` returns null and falls through to the local
+ *  tier; amenities (assets/markers) aren't IWMS records either → null. */
 function iwmsCreateAction(type: UnitType): string | null {
   switch (type) {
     case 'workstation':
-      return 'create-desks';
+      return 'create-desk';
     case 'locker':
-      return 'create-lockers';
+      return 'create-locker';
     case 'parking':
-      return 'create-parkings';
-    case 'room':
-      return 'create-rooms';
+      return 'create-parking-stall';
     default:
       return null;
   }
@@ -293,12 +292,18 @@ export class ConnectorDataSource implements FloorplanDataSource {
   }
 
   /**
-   * Create ONE real record via the dedicated facilio-iwms module action (create-desks /
-   * create-lockers / create-parkings / create-rooms) — the write the app was missing: a new
-   * desk/locker/parking/room becomes an actual IWMS record, not just a vibe-db blob. Reads still
-   * come from facilio-cmms; only this write targets the IWMS connector. V5 create convention wraps
-   * the fields under `data`; the response's data.id is the authoritative id. Throws (→ local tier)
-   * when the connector isn't reachable/authorized, so the app still works.
+   * Create ONE real record via the dedicated facilio-iwms module action (create-desk /
+   * create-locker / create-parking-stall) — the write the app was missing: a new desk/locker/
+   * parking becomes an actual IWMS record, not just a vibe-db blob. Reads still come from
+   * facilio-cmms; only this write targets the IWMS connector.
+   *
+   * The action takes a single `body` input = the V5 request body, which wraps the fields under
+   * `data` (Facilio V5 create convention). The response's data.id is the authoritative id.
+   *
+   * NOTE: the exact `body`/field names couldn't be verified against a live record — the connector
+   * currently rejects every call with FORBIDDEN ("V5 API cannot be accessed from this domain — use
+   * the API domain"), i.e. its Base URL still points at the app domain, not the API domain. Until
+   * that connector config is fixed, this throws and the create falls through to the local tier.
    */
   async createUnit(loc: CreateSpaceLoc, unit: Unit): Promise<Unit> {
     const action = iwmsCreateAction(unit.type);
@@ -308,10 +313,10 @@ export class ConnectorDataSource implements FloorplanDataSource {
     if (!/^\d+$/.test(loc.floorId)) {
       throw new Error('facilio-iwms: not an org floor id');
     }
-    const data: Record<string, unknown> = { name: unit.label, floor: Number(loc.floorId) };
-    if (loc.buildingId && /^\d+$/.test(loc.buildingId)) data.building = Number(loc.buildingId);
-    if (loc.siteId && /^\d+$/.test(loc.siteId)) data.site = Number(loc.siteId);
-    const res = await vibe.executeAction('facilio-iwms', action, { data });
+    const fields: Record<string, unknown> = { name: unit.label, floor: Number(loc.floorId) };
+    if (loc.buildingId && /^\d+$/.test(loc.buildingId)) fields.building = Number(loc.buildingId);
+    if (loc.siteId && /^\d+$/.test(loc.siteId)) fields.site = Number(loc.siteId);
+    const res = await vibe.executeAction('facilio-iwms', action, { body: { data: fields } });
     const id = createdSpaceId(res);
     if (!id) throw new Error(`facilio-iwms: ${action} returned no id`);
     return { ...unit, id, unplaced: false };
