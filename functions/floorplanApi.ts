@@ -224,6 +224,15 @@ server.addHandler({
     return { ok: true };
   },
 });
+server.addHandler({
+  name: 'clearCache',
+  description: 'Drop every mirrored connector cache (all rows keyed cache:*) so the next read re-fetches from the connector and rebuilds the mirror. Returns how many were removed.',
+  parameters: {},
+  execute: async () => {
+    const res = connect().query("delete from app_data where key like 'cache:%'", []);
+    return { ok: true, removed: res.rowCount ?? 0 };
+  },
+});
 
 // ---- floorplan source files (uploaded image / PDF·CAD render), per floor+plan ----
 // Stored in a SEPARATE table `floorplan_files(key,value)` so a large renderable blob

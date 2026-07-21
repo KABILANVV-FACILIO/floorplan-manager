@@ -126,6 +126,11 @@ export class FacilioApiDataSource implements FloorplanDataSource {
   async saveUnits(): Promise<void> {
     throw new Error('facilio-api: unit placement not wired');
   }
+  // Space creation is wired on the CMMS connector tier (create-space), not the raw @facilio/api
+  // layer — throw so the composite falls through to it.
+  async createUnit(): Promise<Unit> {
+    throw new Error('facilio-api: space creation goes through the CMMS connector — not wired here');
+  }
   async getAssignments(): Promise<Assignments> {
     throw new Error('facilio-api: assignments (Moves-derived) not wired');
   }

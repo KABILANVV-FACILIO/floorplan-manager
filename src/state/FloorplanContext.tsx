@@ -1,6 +1,8 @@
 import { createContext, useContext, useEffect, useMemo, useReducer, useRef } from 'react';
 import type { Dispatch, MutableRefObject, ReactNode } from 'react';
 import { dataSource } from '../lib/dataSource';
+import type { CreateSpaceLoc } from '../lib/dataSource';
+import { clearMirrorCache } from '../lib/moduleCache';
 import { PORTFOLIO as MOCK_PORTFOLIO, EMPLOYEES as MOCK_EMPLOYEES, seedBookings, seedUnits, seedAssignments } from '../lib/mockData';
 import { floorImageKey, resolveMarkerDef, TYPE_META } from '../lib/types';
 import type { AmenityIcon, Booking, MarkerDef, PlanId, Role, Site, Unit, UnitType } from '../lib/types';
@@ -60,6 +62,20 @@ async function persistUnits(floorId: string, units: Unit[]): Promise<void> {
     });
   }
   await local;
+}
+
+/** Walk the portfolio tree to find which site/building a floor belongs to — create-space needs the
+ *  site id (and building, when known). Returns nulls for the parents on a demo/slug floor that isn't
+ *  in the org tree; the connector tier then rejects the create and the local tier owns the record. */
+function resolveSpaceLoc(portfolio: Site[], floorId: string): CreateSpaceLoc {
+  for (const site of portfolio) {
+    for (const building of site.buildings) {
+      if (building.floors.some((f) => f.id === floorId)) {
+        return { siteId: site.id, buildingId: building.id, floorId };
+      }
+    }
+  }
+  return { siteId: null, buildingId: null, floorId };
 }
 
 /** First floor found anywhere in the tree — sites/buildings can be empty shells, so this can't assume `portfolio[0].buildings[0].floors[0]`. */
@@ -460,13 +476,19 @@ function buildActions(state: AppState, dispatch: Dispatch<Action>, canvasRectRef
       dataSource.saveUnits(state.floorId, [...state.units, { ...pooled, geom: { kind: 'point', x: spot.x, y: spot.y }, room, floor: state.floorId }]);
       showToast(`${pooled.label} placed`);
     },
-    /** Map dialog: explicitly create a NEW auto-numbered record at the pending spot. */
-    confirmPlacementCreate: () => {
+    /**
+     * Map dialog: explicitly create a NEW auto-numbered record at the pending spot. This is a REAL
+     * record write — `dataSource.createUnit` hits the CMMS connector's create-space so the org's
+     * database gets the desk/locker/parking (it falls back to the local vibe-db/mock tier when the
+     * connector isn't reachable, e.g. dev). The on-plan position is then persisted via saveUnits,
+     * since space records carry no floorplan geometry.
+     */
+    confirmPlacementCreate: async () => {
       const spot = state.pendingPlacement;
       if (!spot) return;
       const { type, x, y } = spot;
       const label = nextLabel(state, type, TYPE_META[type].prefix);
-      const unit: Unit = {
+      const base: Unit = {
         id: 'u' + Date.now(),
         type,
         label,
@@ -479,8 +501,9 @@ function buildActions(state: AppState, dispatch: Dispatch<Action>, canvasRectRef
         // Selection panel to make them bookable instead of assignable.
         ...(type === 'workstation' ? { deskType: 'ASSIGNED' as const } : {}),
       };
-      dispatch({ type: 'ADD_UNIT', unit });
       dispatch({ type: 'SET_PENDING_PLACEMENT', placement: null });
+      const unit = await dataSource.createUnit(resolveSpaceLoc(state.portfolio, state.floorId), base).catch(() => base);
+      dispatch({ type: 'ADD_UNIT', unit });
       dataSource.saveUnits(state.floorId, [...state.units, unit]);
       showToast(`${label} added`);
     },
@@ -504,10 +527,10 @@ function buildActions(state: AppState, dispatch: Dispatch<Action>, canvasRectRef
       showToast(`${placed.label} moved`);
     },
     pushDraftPoint: (pt: [number, number]) => dispatch({ type: 'PUSH_DRAFT_POINT', pt }),
-    closeDraft: () => {
+    closeDraft: async () => {
       if (state.draft.length < 3) return;
       const label = nextLabel(state, 'room', 'RM');
-      const unit: Unit = {
+      const base: Unit = {
         id: 'u' + Date.now(),
         type: 'room',
         label,
@@ -516,6 +539,9 @@ function buildActions(state: AppState, dispatch: Dispatch<Action>, canvasRectRef
         floor: state.floorId,
         plan: 'custom',
       };
+      // A drawn room is a real space too — create it on the connector (category "Room"), then
+      // persist its polygon locally. Falls back to the local record if the connector isn't there.
+      const unit = await dataSource.createUnit(resolveSpaceLoc(state.portfolio, state.floorId), base).catch(() => base);
       dispatch({ type: 'CLOSE_DRAFT', unit });
       dataSource.saveUnits(state.floorId, [...state.units, unit]);
       showToast(`${label} created — rename it in the Selection panel`);
@@ -883,6 +909,20 @@ function buildActions(state: AppState, dispatch: Dispatch<Action>, canvasRectRef
     resetPerms: () => {
       dispatch({ type: 'RESET_PERMS' });
       showToast('Permissions reset to defaults');
+    },
+
+    /**
+     * Drop the vibe-db mirror of every connector module (portfolio, employees, assets, units:*).
+     * Reads keep working — each refetches the connector live — so this forces the next load of
+     * each module to rebuild from the API. Best-effort: a runtime-less dev session removes 0.
+     */
+    clearCaches: async () => {
+      const removed = await clearMirrorCache();
+      showToast(
+        removed > 0
+          ? `Cleared ${removed} cached module${removed === 1 ? '' : 's'} — data will refetch from the connector`
+          : 'Caches cleared — data will refetch from the connector',
+      );
     },
 
     openMap: () => dispatch({ type: 'SET_ACTIVE_VIEW', view: 'map' }),

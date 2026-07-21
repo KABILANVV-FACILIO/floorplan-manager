@@ -21,6 +21,15 @@ export interface FloorplanDataSource {
   getAssets(): Promise<Asset[]>;
   getUnits(floorId: string): Promise<Unit[]>;
   saveUnits(floorId: string, units: Unit[]): Promise<void>;
+  /**
+   * Mint a genuinely-new space record (desk/locker/parking/room). On the connector tier this
+   * is a real `create-space` API write — the org's CMMS gets the record — and the returned Unit
+   * carries the authoritative server id. Lower tiers (vibe-db/mock) just echo the unit back with
+   * its local id so a runtime-less/dev session still works; the on-plan position is persisted
+   * separately by the caller via saveUnits (space records hold no floorplan geometry). Amenities
+   * (assets/markers) are NOT spaces and are rejected by the connector tier.
+   */
+  createUnit(loc: CreateSpaceLoc, unit: Unit): Promise<Unit>;
   getAssignments(floorId: string): Promise<Assignments>;
   assignUnit(unitId: string, employeeId: string): Promise<void>;
   vacateUnit(unitId: string): Promise<void>;
@@ -41,6 +50,31 @@ export interface FloorBundle {
   assignments: Assignments;
   bookings: Booking[];
   file: string | null;
+}
+
+/** Where a new space is being created — its floor, plus the enclosing building/site so the
+ *  connector's create-space (which requires `site`) can be satisfied. Resolved by the caller
+ *  from the portfolio tree. */
+export interface CreateSpaceLoc {
+  siteId: string | null;
+  buildingId: string | null;
+  floorId: string;
+}
+
+/** This app's unit type → the Facilio spaceCategory used when creating the record (the reverse of
+ *  unitTypeFromSpaceCategory). The org must have these categories configured; otherwise create-space
+ *  rejects the value and the write falls through to the local tier. */
+function spaceCategoryForType(type: UnitType): string {
+  switch (type) {
+    case 'workstation':
+      return 'Desk';
+    case 'locker':
+      return 'Locker';
+    case 'parking':
+      return 'Parking Stall';
+    default:
+      return 'Room';
+  }
 }
 
 const LS_KEY = 'facilio_floorplan_proto_v2';
@@ -99,6 +133,11 @@ export class MockDataSource implements FloorplanDataSource {
     const saved = loadPersisted();
     const others = (saved?.units ?? seedUnits()).filter((u) => u.floor !== floorId);
     savePersisted({ units: [...others, ...units] });
+  }
+  // No backend to create against — the record lives entirely in localStorage, persisted with its
+  // position by the caller's saveUnits. Just echo the unit back with its local id.
+  async createUnit(_loc: CreateSpaceLoc, unit: Unit): Promise<Unit> {
+    return unit;
   }
 
   async getAssignments(floorId: string): Promise<Assignments> {
@@ -243,7 +282,38 @@ export class ConnectorDataSource implements FloorplanDataSource {
   }
 
   async saveUnits(): Promise<void> {
-    throw new Error('facilio-cmms: read-only tier — unit writes persist on the db/mock tiers');
+    // Bulk position saves stay off the connector: saveUnits fires on every micro-edit with the
+    // FULL unit list, and replaying that through create/update-space would churn (or duplicate)
+    // real records. On-plan geometry lives in the vibe-db overlay; only genuine record creation
+    // (createUnit) and single-record edits belong on the connector.
+    throw new Error('facilio-cmms: bulk unit writes persist on the db/mock tiers');
+  }
+
+  /**
+   * Create ONE real space record via `create-space`. This is the write the app was missing: a new
+   * desk/locker/parking/room now becomes an actual row in the org's CMMS (not just a vibe-db blob).
+   * Requires a numeric org floor and a resolved site (create-space's required field). Returns the
+   * unit carrying the server id; the next list-spaces read then surfaces it and rebuilds the mirror.
+   */
+  async createUnit(loc: CreateSpaceLoc, unit: Unit): Promise<Unit> {
+    if (unit.type === 'amenity') {
+      throw new Error('facilio-cmms: amenities/assets are not space records');
+    }
+    if (!/^\d+$/.test(loc.floorId)) {
+      throw new Error('facilio-cmms: not an org floor id');
+    }
+    const space: Record<string, unknown> = {
+      name: unit.label,
+      spaceCategory: spaceCategoryForType(unit.type),
+      moduleState: 'active',
+      floor: Number(loc.floorId),
+    };
+    if (loc.siteId && /^\d+$/.test(loc.siteId)) space.site = Number(loc.siteId);
+    if (loc.buildingId && /^\d+$/.test(loc.buildingId)) space.building = Number(loc.buildingId);
+    const res = await vibe.executeAction('facilio-cmms', 'create-space', { space });
+    const id = createdSpaceId(res);
+    if (!id) throw new Error('facilio-cmms: create-space returned no id');
+    return { ...unit, id, unplaced: false };
   }
 
   async getAssignments(): Promise<Assignments> {
@@ -271,6 +341,19 @@ type CmmsRow = Record<string, unknown>;
 function cmmsRows(res: unknown): CmmsRow[] {
   const data = (res as { data?: unknown } | null)?.data;
   return Array.isArray(data) ? (data as CmmsRow[]) : [];
+}
+
+/** Pull the new record's id out of a create-space response, tolerating the shapes the connector
+ *  may return: {data:[{id}]}, {data:{id}}, or a bare {id}. */
+function createdSpaceId(res: unknown): string | null {
+  const r = res as { data?: unknown; id?: unknown } | null;
+  const d = r?.data ?? r;
+  if (Array.isArray(d)) {
+    const first = d[0] as { id?: unknown } | undefined;
+    return first?.id != null ? String(first.id) : null;
+  }
+  const id = (d as { id?: unknown } | null)?.id ?? r?.id;
+  return id != null ? String(id) : null;
 }
 
 function lookupId(v: unknown): string | null {
@@ -458,6 +541,12 @@ export class VibeDbDataSource implements FloorplanDataSource {
     // Studio Function params must be number/string — arrays/objects travel as JSON strings.
     return this.call('saveUnits', { floorId, units: JSON.stringify(units) });
   }
+  // The vibe-db is the fallback owner of a record when the connector can't create it (dev, or an
+  // unreachable connector): keep the local id and let the caller's saveUnits persist it with its
+  // position into the units blob.
+  async createUnit(_loc: CreateSpaceLoc, unit: Unit): Promise<Unit> {
+    return unit;
+  }
   getAssignments(floorId: string): Promise<Assignments> {
     return this.call('getAssignments', { floorId });
   }
@@ -581,6 +670,14 @@ export class CompositeDataSource implements FloorplanDataSource {
   }
   saveUnits(floorId: string, units: Unit[]) {
     return this.run('saveUnits', floorId, units);
+  }
+  /**
+   * Connector-first by tier order: the CMMS `create-space` write wins when reachable (real record
+   * + server id), and only falls through to the vibe-db/mock local echo when it isn't. This is
+   * what makes a new desk/locker/parking actually hit the connector instead of just the app db.
+   */
+  createUnit(loc: CreateSpaceLoc, unit: Unit) {
+    return this.run('createUnit', loc, unit) as Promise<Unit>;
   }
   getAssignments(floorId: string) {
     return this.run('getAssignments', floorId);

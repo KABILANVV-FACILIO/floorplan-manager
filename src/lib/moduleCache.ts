@@ -82,3 +82,19 @@ export async function mirrorThroughCache<T>(key: string, fetchFromApi: () => Pro
   if (fresh) return fresh; // API genuinely returned [] and there's no mirror
   throw new Error(`mirrorThroughCache(${key}): connector unavailable and no cached copy`);
 }
+
+/**
+ * Drop every mirrored connector module from the vibe-db (portfolio, employees, assets,
+ * units:*). Reads keep working — each still fetches the connector fresh — but the stale
+ * offline fallback is gone, so the next read of every module rebuilds its mirror from the
+ * live API. Returns the number of cache rows removed (0 when the runtime is unreachable,
+ * e.g. a plain `npm run dev` session). Best-effort: never throws.
+ */
+export async function clearMirrorCache(): Promise<number> {
+  try {
+    const res = await vibe.executeFunction<{ removed?: number } | null>('floorplanApi', 'clearCache', {});
+    return res?.removed ?? 0;
+  } catch {
+    return 0;
+  }
+}

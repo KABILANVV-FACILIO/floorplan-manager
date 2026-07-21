@@ -134,60 +134,78 @@ function BookingsSettingsTab() {
 function PermissionsTab() {
   const { state, actions } = useFloorplan();
   return (
-    <div className={styles.card}>
-      <div className={styles.cardHead}>
-        <div>
-          <h3 className={styles.cardTitle}>Roles &amp; access</h3>
-          <p className={styles.cardDesc}>Choose which roles can perform each action. Changes apply immediately and are saved for your workspace.</p>
-        </div>
-        <Button variant="secondary" onClick={actions.resetPerms}>
-          Reset to defaults
-        </Button>
-      </div>
-      <div className={styles.matrixHead}>
-        <span>Action</span>
-        {ROLES.map((r) => (
-          <span key={r.id} className={styles.matrixHeadCell}>
-            {r.name}
-          </span>
-        ))}
-      </div>
-      {ACTIONS.map((a) => (
-        <div key={a.id} className={styles.matrixRow}>
+    <div className={styles.stack}>
+      <div className={styles.card}>
+        <div className={styles.cardHead}>
           <div>
-            <div className={styles.rowName}>{a.name}</div>
-            <div className={styles.rowDesc}>{a.desc}</div>
+            <h3 className={styles.cardTitle}>Roles &amp; access</h3>
+            <p className={styles.cardDesc}>Choose which roles can perform each action. Changes apply immediately and are saved for your workspace.</p>
           </div>
+          <Button variant="secondary" onClick={actions.resetPerms}>
+            Reset to defaults
+          </Button>
+        </div>
+        <div className={styles.matrixHead}>
+          <span>Action</span>
           {ROLES.map((r) => (
-            <div key={r.id} className={styles.switchCell}>
-              <PermSwitch action={a.id} role={r.id} />
-            </div>
+            <span key={r.id} className={styles.matrixHeadCell}>
+              {r.name}
+            </span>
           ))}
         </div>
-      ))}
-      <div className={styles.footNote} style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-        <span>
-          Preview the app as a role:
-        </span>
-        <div style={{ display: 'inline-flex', gap: 4, padding: 4, background: 'var(--ink-050)', border: '1px solid var(--ink-200)', borderRadius: 8 }}>
-          {ROLES.map((r) => (
-            <button
-              key={r.id}
-              onClick={() => actions.setRole(r.id)}
-              style={{
-                height: 28,
-                padding: '0 12px',
-                border: 'none',
-                borderRadius: 6,
-                background: state.role === r.id ? 'var(--blue-500)' : 'transparent',
-                color: state.role === r.id ? '#fff' : 'var(--ink-600)',
-                font: '600 12px/1 var(--font-sans)',
-                cursor: 'pointer',
-              }}
-            >
-              {r.name}
-            </button>
-          ))}
+        {ACTIONS.map((a) => (
+          <div key={a.id} className={styles.matrixRow}>
+            <div>
+              <div className={styles.rowName}>{a.name}</div>
+              <div className={styles.rowDesc}>{a.desc}</div>
+            </div>
+            {ROLES.map((r) => (
+              <div key={r.id} className={styles.switchCell}>
+                <PermSwitch action={a.id} role={r.id} />
+              </div>
+            ))}
+          </div>
+        ))}
+        <div className={styles.footNote} style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <span>
+            Preview the app as a role:
+          </span>
+          <div style={{ display: 'inline-flex', gap: 4, padding: 4, background: 'var(--ink-050)', border: '1px solid var(--ink-200)', borderRadius: 8 }}>
+            {ROLES.map((r) => (
+              <button
+                key={r.id}
+                onClick={() => actions.setRole(r.id)}
+                style={{
+                  height: 28,
+                  padding: '0 12px',
+                  border: 'none',
+                  borderRadius: 6,
+                  background: state.role === r.id ? 'var(--blue-500)' : 'transparent',
+                  color: state.role === r.id ? '#fff' : 'var(--ink-600)',
+                  font: '600 12px/1 var(--font-sans)',
+                  cursor: 'pointer',
+                }}
+              >
+                {r.name}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className={styles.card}>
+        <div className={styles.cardHead}>
+          <div>
+            <h3 className={styles.cardTitle}>Data &amp; caches</h3>
+            <p className={styles.cardDesc}>
+              The app keeps a copy of each connector module (sites, people, assets, spaces) in its
+              database so it loads fast and still works when the connector is briefly unreachable.
+              Clearing forces every module to refetch from the connector on its next load.
+            </p>
+          </div>
+          <Button variant="secondary" onClick={actions.clearCaches}>
+            Clear all caches
+          </Button>
         </div>
       </div>
     </div>
