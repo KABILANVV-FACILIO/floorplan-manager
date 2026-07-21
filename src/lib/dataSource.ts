@@ -2,6 +2,7 @@ import { vibe } from './vibe';
 import { EMPLOYEES, PORTFOLIO, seedAssignments, seedBookings, seedUnits } from './mockData';
 import { DEMO_ASSETS } from './assets';
 import type { Asset } from './assets';
+import { mirrorThroughCache } from './moduleCache';
 import { FacilioApiDataSource } from './facilioApiDataSource';
 import type { Assignments, Booking, Employee, Site, Unit } from './types';
 
@@ -167,59 +168,78 @@ export class MockDataSource implements FloorplanDataSource {
  * the full unit list, and pushing that through create-space would mint duplicate real records.
  * (The connector additionally supports list-work-orders / list-tenants — ready to wire when the
  * asset→maintenance and tenant features land.)
+ *
+ * MIRROR CACHE: every read here goes through `mirrorThroughCache` (see lib/moduleCache), which
+ * keeps a copy of each module in the app's vibe-db equal to the API — rewriting it only when the
+ * data changed — and serves that copy when the connector is unreachable. The desks/lockers/etc.
+ * modules from the separate `facilio-iwms` connector will flow through the same helper once that
+ * connector is wired.
  */
 export class ConnectorDataSource implements FloorplanDataSource {
   readonly name = 'facilio-cmms';
 
-  async getPortfolio(): Promise<Site[]> {
-    const [sitesRes, buildingsRes, floorsRes] = await Promise.all([
-      vibe.executeAction('facilio-cmms', 'list-sites', { page_size: 200, select: 'id,name' }),
-      vibe.executeAction('facilio-cmms', 'list-buildings', { page_size: 200, expand: 'site', select: 'id,name,site' }),
-      vibe.executeAction('facilio-cmms', 'list-floors', {
+  // Every connector read below flows through the vibe-db mirror cache (mirrorThroughCache):
+  // the API stays the source of truth, the vibe-db copy is rewritten only when the data changed,
+  // and a stale mirror is served if the connector is unreachable. The raw fetch+map is the inner
+  // function; caching is transparent to callers.
+
+  getPortfolio(): Promise<Site[]> {
+    return mirrorThroughCache('portfolio', async () => {
+      const [sitesRes, buildingsRes, floorsRes] = await Promise.all([
+        vibe.executeAction('facilio-cmms', 'list-sites', { page_size: 200, select: 'id,name' }),
+        vibe.executeAction('facilio-cmms', 'list-buildings', { page_size: 200, expand: 'site', select: 'id,name,site' }),
+        vibe.executeAction('facilio-cmms', 'list-floors', {
+          page_size: 200,
+          expand: 'building,site',
+          select: 'id,name,building,site,floorlevel',
+        }),
+      ]);
+      return buildFromCmmsGraph(sitesRes, buildingsRes, floorsRes);
+    });
+  }
+
+  getEmployees(): Promise<Employee[]> {
+    return mirrorThroughCache('employees', async () => {
+      // `list-employees` — the org's people directory. Lookup fields (department) return raw ids
+      // unless expanded, so hydrate it; a record may still have no department, which is fine.
+      const res = await vibe.executeAction('facilio-cmms', 'list-employees', {
         page_size: 200,
-        expand: 'building,site',
-        select: 'id,name,building,site,floorlevel',
-      }),
-    ]);
-    return buildFromCmmsGraph(sitesRes, buildingsRes, floorsRes);
-  }
-
-  async getEmployees(): Promise<Employee[]> {
-    // `list-employees` — the org's people directory. Lookup fields (department) return raw ids
-    // unless expanded, so hydrate it; a record may still have no department, which is fine.
-    const res = await vibe.executeAction('facilio-cmms', 'list-employees', {
-      page_size: 200,
-      expand: 'department',
-      select: 'id,name,email,department,designation',
+        expand: 'department',
+        select: 'id,name,email,department,designation',
+      });
+      return mapCmmsEmployees(res);
     });
-    return mapCmmsEmployees(res);
   }
 
-  async getAssets(): Promise<Asset[]> {
-    // `list-assets` — the org's asset/equipment catalog (Edit-mode asset picker). `category` is a
-    // plain string; `space` is an expanded {id,name} used as the row's location line.
-    const res = await vibe.executeAction('facilio-cmms', 'list-assets', {
-      page_size: 200,
-      expand: 'category,space',
-      select: 'id,name,category,space',
+  getAssets(): Promise<Asset[]> {
+    return mirrorThroughCache('assets', async () => {
+      // `list-assets` — the org's asset/equipment catalog (Edit-mode asset picker). `category` is a
+      // plain string; `space` is an expanded {id,name} used as the row's location line.
+      const res = await vibe.executeAction('facilio-cmms', 'list-assets', {
+        page_size: 200,
+        expand: 'category,space',
+        select: 'id,name,category,space',
+      });
+      return mapCmmsAssets(res);
     });
-    return mapCmmsAssets(res);
   }
 
-  async getUnits(floorId: string): Promise<Unit[]> {
-    // Real Facilio floor ids are numeric; slug ids (RCU import, demo floors)
-    // belong to the mock tier — throw so the composite falls through instead
-    // of this tier answering [] and masking the seeded units.
+  getUnits(floorId: string): Promise<Unit[]> {
+    // Real Facilio floor ids are numeric; slug ids (RCU import, demo floors) belong to the mock
+    // tier — throw so the composite falls through instead of this tier answering [] and masking
+    // the seeded units. (The throw happens before any cache I/O.)
     if (!/^\d+$/.test(floorId)) {
-      throw new Error('facilio-cmms: not an org floor id');
+      return Promise.reject(new Error('facilio-cmms: not an org floor id'));
     }
-    const res = await vibe.executeAction('facilio-cmms', 'list-spaces', {
-      filters: `floor=${floorId}`,
-      page_size: 200,
-      expand: 'spaceCategory',
-      select: 'id,name,floor,spaceCategory,area,maxOccupancy',
+    return mirrorThroughCache(`units:${floorId}`, async () => {
+      const res = await vibe.executeAction('facilio-cmms', 'list-spaces', {
+        filters: `floor=${floorId}`,
+        page_size: 200,
+        expand: 'spaceCategory',
+        select: 'id,name,floor,spaceCategory,area,maxOccupancy',
+      });
+      return mapCmmsSpacesToUnits(res, floorId);
     });
-    return mapCmmsSpacesToUnits(res, floorId);
   }
 
   async saveUnits(): Promise<void> {

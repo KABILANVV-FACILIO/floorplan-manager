@@ -197,6 +197,34 @@ server.addHandler({
   },
 });
 
+// ---- connector mirror cache ----
+// A read-through mirror of the Facilio connector API. The client fetches a module from the
+// connector and, only when the data actually changed (hash differs), writes it back here — so
+// the vibe-db copy stays equal to the API while avoiding needless writes. It's served back when
+// the connector is unreachable. Stored in `app_data` under a `cache:` key prefix (the app DB
+// role is DML-only, so no dedicated table can be created at runtime). Value is a JSON string
+// envelope {hash, records, syncedAt}.
+server.addHandler({
+  name: 'getCache',
+  description: 'Read a mirrored connector module blob (JSON string {hash,records,syncedAt}) or null.',
+  parameters: { key: { description: 'Cache key, e.g. employees | assets | portfolio | units:<floorId>', type: 'string' } },
+  execute: async (args) => {
+    return { value: getKV(connect(), 'app_data', 'cache:' + args.key) };
+  },
+});
+server.addHandler({
+  name: 'putCache',
+  description: 'Upsert a mirrored connector module blob (JSON string). The client calls this only when the API data changed.',
+  parameters: {
+    key: { description: 'Cache key', type: 'string' },
+    value: { description: 'Envelope JSON string {hash,records,syncedAt}', type: 'string' },
+  },
+  execute: async (args) => {
+    setKV(connect(), 'app_data', 'cache:' + args.key, args.value ?? '');
+    return { ok: true };
+  },
+});
+
 // ---- floorplan source files (uploaded image / PDF·CAD render), per floor+plan ----
 // Stored in a SEPARATE table `floorplan_files(key,value)` so a large renderable blob
 // (a data URL) never bloats the app_data row that getUnits/getBookings read on every
