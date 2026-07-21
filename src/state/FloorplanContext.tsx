@@ -77,24 +77,56 @@ function firstFloorId(portfolio: Site[]): string | undefined {
  * portfolio. Finds which plan types are actually configured, defaults `planId` to one of them
  * if the current selection isn't among them, then loads that plan's real image.
  */
+/** Blob/object URLs aren't portable to the Vibe DB — turn any image URL into a storable data URL. */
+async function toStorableDataUrl(url: string): Promise<string | null> {
+  if (url.startsWith('data:')) return url;
+  try {
+    const blob = await fetch(url).then((r) => r.blob());
+    return await new Promise<string>((resolve, reject) => {
+      const fr = new FileReader();
+      fr.onload = () => resolve(fr.result as string);
+      fr.onerror = () => reject(fr.error);
+      fr.readAsDataURL(blob);
+    });
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Floor-plan image load, with the Vibe DB as a read-through cache of the floorplan image (per the
+ * product ask): (1) serve the cached copy immediately if we have one, (2) refresh from the
+ * connector/@facilio when available, and (3) write that fetch back to the cache so the next load
+ * is instant and works offline. The cache write is deployed-only (persistFloorplanFile no-ops in
+ * dev), and only real (@facilio/connector) fetches populate it — so it stays equal to the source.
+ */
 async function loadFloorPlanTypesAndImage(dispatch: Dispatch<Action>, floorId: string, currentPlanId: PlanId) {
   dispatch({ type: 'SET_FLOOR_IMAGE_LOADING', value: true });
   try {
+    let resolvedPlanId = currentPlanId;
     if (isFacilioApiConfigured) {
       const types = await getFloorPlanSummary(floorId).catch(() => []);
       dispatch({ type: 'SET_FLOOR_PLAN_TYPES', floorId, types });
-      if (!types.length) return;
+      if (types.length) {
+        resolvedPlanId = types.some((t) => t.id === currentPlanId) ? currentPlanId : types[0].id;
+        if (resolvedPlanId !== currentPlanId) dispatch({ type: 'SET_PLAN', planId: resolvedPlanId });
+      }
+    }
 
-      const resolvedPlanId = types.some((t) => t.id === currentPlanId) ? currentPlanId : types[0].id;
-      if (resolvedPlanId !== currentPlanId) dispatch({ type: 'SET_PLAN', planId: resolvedPlanId });
+    // 1) Vibe-DB cache first — instant display of the stored image if present.
+    const cached = await loadFloorplanFile(floorId, resolvedPlanId).catch(() => null);
+    if (cached?.dataUrl) dispatch({ type: 'SET_FLOOR_IMAGE', floorId, planId: resolvedPlanId, dataUrl: cached.dataUrl });
 
+    // 2) Refresh from the source (connector/@facilio), and 3) cache the fetch back to the Vibe DB.
+    if (isFacilioApiConfigured) {
       const imageUrl = await fetchFloorplanImage(floorId, resolvedPlanId).catch(() => null);
-      if (imageUrl) dispatch({ type: 'SET_FLOOR_IMAGE', floorId, planId: resolvedPlanId, dataUrl: imageUrl });
-    } else {
-      // Deployed (no @facilio/api): reload the upload we persisted for this plan to the Vibe DB,
-      // so a refresh doesn't lose the floorplan. Falls back silently to the empty state if none.
-      const stored = await loadFloorplanFile(floorId, currentPlanId).catch(() => null);
-      if (stored?.dataUrl) dispatch({ type: 'SET_FLOOR_IMAGE', floorId, planId: currentPlanId, dataUrl: stored.dataUrl });
+      if (imageUrl) {
+        dispatch({ type: 'SET_FLOOR_IMAGE', floorId, planId: resolvedPlanId, dataUrl: imageUrl });
+        const storable = await toStorableDataUrl(imageUrl);
+        if (storable && storable !== cached?.dataUrl) {
+          void persistFloorplanFile(floorId, resolvedPlanId, { dataUrl: storable }).catch(() => {});
+        }
+      }
     }
   } finally {
     dispatch({ type: 'SET_FLOOR_IMAGE_LOADING', value: false });

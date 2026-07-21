@@ -125,6 +125,13 @@ export interface Unit {
   geom: UnitGeom;
   floor: string;
   plan: PlanId;
+  /**
+   * True for records that exist in the org but have no on-plan position yet — e.g. desks/rooms
+   * read from the CMMS connector's spaces (their `geom` is a 0,0 placeholder). Listed in the
+   * sidebar with their real type, but NOT drawn on the canvas (positions come from the
+   * floorplanmarker / facilio-iwms path). Distinct from the edit-mode "Available to place" pool.
+   */
+  unplaced?: boolean;
   /** Workstations only — see DeskType. Undefined = ASSIGNED. */
   deskType?: DeskType;
   /** Amenity markers only — which glyph the marker renders (legacy built-in five). */

@@ -485,8 +485,9 @@ export function Canvas() {
     .filter((u) => u.type === 'room' && u.geom.kind === 'poly')
     .map((u) => ({ ...u, geom: previewedGeom(u) }));
   const markers = state.units
-    // amenities show on every plan type; desks/lockers/parking only on theirs
-    .filter((u) => u.type !== 'room' && (u.type === 'amenity' || u.plan === state.planId))
+    // amenities show on every plan type; desks/lockers/parking only on theirs. `unplaced` units
+    // (org records with no plan position, e.g. connector spaces) are sidebar-only, never drawn.
+    .filter((u) => u.type !== 'room' && !u.unplaced && (u.type === 'amenity' || u.plan === state.planId))
     .map((u) => ({ ...u, geom: previewedGeom(u) }));
 
   const selectedRoom = isEditSelect && multiSel.size === 0 ? rooms.find((r) => r.id === state.selected) : undefined;

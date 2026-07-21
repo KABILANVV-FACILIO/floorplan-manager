@@ -11,6 +11,11 @@ export function moduleColor(state: AppState, type: Unit['type'], key: string): s
   return def ? def.def : '#607796';
 }
 
+/** A pale wash of a state color for a marker's fill (border/text stay the saturated color). */
+function tint(color: string): string {
+  return `color-mix(in srgb, ${color} 16%, #fff)`;
+}
+
 export interface UnitStatus {
   key: string;
   text: string;
@@ -98,9 +103,12 @@ export function markerStyle(state: AppState, unit: Unit, markerScale = 1): Marke
       return { bg: 'var(--blue-100)', bd: 'var(--blue-500)', fg: 'var(--blue-700)', opacity: 1, shadow: '0 0 0 4px rgba(0,89,214,0.22)', size, radius, zIndex: 6, occText: empId ? initialsOf(employeeNameFallback(state, empId)) : null, icon: empId ? null : markerIcon(unit.type) };
     }
     if (empId) {
-      return { bg: 'var(--blue-500)', bd: 'var(--blue-600)', fg: '#fff', opacity: 1, shadow, size, radius, zIndex, occText: initialsOf(employeeNameFallback(state, empId)), icon: null };
+      // Occupied desk: solid fill in the configurable "assigned" color, white initials.
+      const c = moduleColor(state, unit.type, 'assigned');
+      return { bg: c, bd: c, fg: '#fff', opacity: 1, shadow, size, radius, zIndex, occText: initialsOf(employeeNameFallback(state, empId)), icon: null };
     }
-    return { bg: 'var(--success-050)', bd: 'var(--success-600)', fg: 'var(--success-700)', opacity: 1, shadow, size, radius, zIndex, occText: null, icon: markerIcon(unit.type) };
+    const free = moduleColor(state, unit.type, 'free');
+    return { bg: tint(free), bd: free, fg: free, opacity: 1, shadow, size, radius, zIndex, occText: null, icon: markerIcon(unit.type) };
   }
 
   // book mode
@@ -123,10 +131,12 @@ export function markerStyle(state: AppState, unit: Unit, markerScale = 1): Marke
   }
   const conflicts = conflictsFor(state.bookings, unit.id, state.date, state.start, state.end);
   if (conflicts.length) {
-    return { bg: 'var(--danger-050)', bd: 'var(--danger-600)', fg: 'var(--danger-700)', opacity: 1, shadow, size, radius, zIndex, occText: null, icon: markerIcon(unit.type) };
+    const c = moduleColor(state, unit.type, 'booked');
+    return { bg: tint(c), bd: c, fg: c, opacity: 1, shadow, size, radius, zIndex, occText: null, icon: markerIcon(unit.type) };
   }
-  // bookable + free: a clearly "go" green, not a white chip with a thin ring
-  return { bg: 'var(--success-050)', bd: 'var(--success-600)', fg: 'var(--success-700)', opacity: 1, shadow, size, radius, zIndex, occText: null, icon: markerIcon(unit.type) };
+  // bookable + free/available — the configurable "go" color.
+  const avail = moduleColor(state, unit.type, unit.type === 'room' ? 'available' : 'free');
+  return { bg: tint(avail), bd: avail, fg: avail, opacity: 1, shadow, size, radius, zIndex, occText: null, icon: markerIcon(unit.type) };
 }
 
 function markerIcon(type: Unit['type']): MarkerStyle['icon'] {

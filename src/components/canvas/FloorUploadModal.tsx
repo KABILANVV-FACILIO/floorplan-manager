@@ -27,17 +27,27 @@ export function FloorUploadModal() {
     setFileName(file.name);
     setStatus('working');
     setError(null);
+    const cad = isCadFile(file.name);
     try {
       const isPlainImage = /\.(png|jpe?g)$/i.test(file.name);
-      let previewUrl: string;
+      // previewUrl stays null when the browser can't render the file (a DWG the CAD engine
+      // chokes on) — we then rely on Facilio's server-rendered image fetched by file id.
+      let previewUrl: string | null = null;
       let cadGroups: CadGroup[] = [];
-      if (isCadFile(file.name)) {
-        // One document-open pass renders the snapshot AND extracts the
-        // drawing's mappable structure (blocks/polylines/circles by layer)
-        // for the auto-map modal.
-        const analysis = await analyzeCadFile(file);
-        previewUrl = analysis.previewUrl;
-        cadGroups = analysis.groups;
+      let clientRenderFailed = false;
+      if (cad) {
+        // One document-open pass renders the snapshot AND extracts the drawing's mappable
+        // structure. If the embedded CAD engine can't parse this DWG, DON'T abort — fall
+        // through and let the server render it from the uploaded file id.
+        try {
+          const analysis = await analyzeCadFile(file);
+          previewUrl = analysis.previewUrl;
+          cadGroups = analysis.groups;
+        } catch (cadErr) {
+          clientRenderFailed = true;
+          // eslint-disable-next-line no-console
+          console.warn('[FloorUploadModal] Browser CAD render failed; will try the server-rendered image', cadErr);
+        }
       } else if (/\.pdf$/i.test(file.name)) {
         previewUrl = await renderPdfToDataUrl(file);
       } else if (isPlainImage) {
@@ -48,50 +58,69 @@ export function FloorUploadModal() {
 
       let uploadedFileId: number | null = null;
       let attachedToFloorPlan = false;
+      let serverImageUsed = false;
       if (isFacilioApiConfigured) {
         try {
-          // Measured off the already-rendered preview (not the raw file) so it works
-          // uniformly for PDF/DWG/DXF too — sizes the synthetic geo-reference quad
-          // (see geoReference.ts) to this plan's actual aspect ratio.
-          const dimensions = await measureImageDataUrl(previewUrl).catch(() => undefined);
+          // Measured off the rendered preview when we have one (sizes the synthetic
+          // geo-reference quad). No local render (CAD failed) → skip; the server sizes it.
+          const dimensions = previewUrl ? await measureImageDataUrl(previewUrl).catch(() => undefined) : undefined;
           const uploaded = await uploadFloorplanFile(state.floorId, state.planId, file, dimensions);
           uploadedFileId = uploaded.fileId;
           attachedToFloorPlan = uploaded.attachedToFloorPlan;
-          // The server round-trip (GET .../files/preview/{fileId}) returns the ORIGINAL
-          // uploaded bytes — for a plain image that's a valid <img> source, so it's fine
-          // (better, even — proves the real round-trip) to switch to it. For PDF/DWG/DXF
-          // it's the raw PDF/CAD bytes, which an <img> can't render — keep the local
-          // rendered snapshot as the actual displayed preview for those.
+          // Plain image: use the round-tripped original (proves the real round-trip).
           if (isPlainImage) previewUrl = uploaded.previewUrl;
+          // No browser render (or CAD that failed) → use Facilio's server-RENDERED image by id.
+          if (!previewUrl && uploaded.serverImageUrl) {
+            previewUrl = uploaded.serverImageUrl;
+            serverImageUsed = true;
+          }
           if (!uploaded.attachedToFloorPlan) {
             // eslint-disable-next-line no-console
             console.warn('[FloorUploadModal] Uploaded to Facilio but could not attach to this floor\'s indoorfloorplan record:', uploaded.attachError);
           }
         } catch (uploadErr) {
           // eslint-disable-next-line no-console
-          console.warn('[FloorUploadModal] Facilio upload failed, keeping the local render only', uploadErr);
+          console.warn('[FloorUploadModal] Facilio upload failed', uploadErr);
         }
       }
 
-      actions.setFloorImage(state.floorId, state.planId, previewUrl);
+      // Nothing renderable and nothing stored → the only true failure. (A stored-but-not-
+      // renderable file is reported below, not thrown, so the upload isn't lost.)
+      if (!previewUrl && uploadedFileId == null) {
+        throw new Error(cad ? 'cad-render-failed' : 'Could not read this file.');
+      }
+
+      if (previewUrl) actions.setFloorImage(state.floorId, state.planId, previewUrl);
       actions.showToast(
         uploadedFileId
-          ? attachedToFloorPlan
-            ? `Floorplan uploaded to Facilio (file #${uploadedFileId})`
-            : `Uploaded to Facilio (file #${uploadedFileId}) — couldn't link it to this floor's plan record`
+          ? serverImageUsed
+            ? `Rendered on the server from file #${uploadedFileId}`
+            : previewUrl
+              ? attachedToFloorPlan
+                ? `Floorplan uploaded to Facilio (file #${uploadedFileId})`
+                : `Uploaded to Facilio (file #${uploadedFileId}) — couldn't link it to this floor's plan record`
+              : `Stored to Facilio (file #${uploadedFileId}) — can't preview it here; view it in AutoCAD`
           : `Floorplan updated from ${file.name}`
       );
+      // A stored-but-unpreviewable CAD file: keep the modal's error visible so the user knows
+      // it's saved-but-not-shown, but don't discard the upload.
+      if (!previewUrl && uploadedFileId != null) {
+        setStatus('error');
+        setError(`Stored to Facilio (file #${uploadedFileId}), but it couldn't be rendered to an image here — open it in AutoCAD.`);
+        return;
+      }
       actions.setUploadOpen(false);
       setStatus('idle');
-      if (isCadFile(file.name)) actions.storeCadAnalysis(state.floorId, state.planId, cadGroups);
+      if (cad) actions.storeCadAnalysis(state.floorId, state.planId, cadGroups);
       if (cadGroups.length > 0) {
         actions.openAutoMap(cadGroups);
-      } else if (isCadFile(file.name)) {
+      } else if (cad && !clientRenderFailed) {
         actions.showToast(`Floorplan updated from ${file.name} — no mappable CAD metadata found`);
       }
     } catch (err) {
       setStatus('error');
-      setError(isCadFile(file.name) ? 'Could not render this CAD file in the browser. You can still store it and view it in AutoCAD.' : (err as Error).message || 'Could not read this file.');
+      const msg = (err as Error).message;
+      setError(cad || msg === 'cad-render-failed' ? 'Could not render this CAD file in the browser, and the server has no image for it. You can still store it and view it in AutoCAD.' : msg || 'Could not read this file.');
     }
   }
 
@@ -131,8 +160,8 @@ export function FloorUploadModal() {
         {status === 'working' && <p className={styles.status}>Rendering {fileName}…</p>}
         {status === 'error' && <p className={styles.error}>{error}</p>}
         <p className={styles.note}>
-          DWG/DXF files are parsed and rendered entirely in your browser (via an embedded, open-source CAD engine) — no file is uploaded to a
-          conversion server.
+          DWG/DXF files render in your browser via an embedded CAD engine. If the browser can't render one, it's uploaded to Facilio and shown
+          from the server-rendered image (by file id) instead.
         </p>
       </div>
       <ModalFooter>

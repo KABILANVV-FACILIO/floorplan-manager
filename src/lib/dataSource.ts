@@ -4,7 +4,7 @@ import { DEMO_ASSETS } from './assets';
 import type { Asset } from './assets';
 import { mirrorThroughCache } from './moduleCache';
 import { FacilioApiDataSource } from './facilioApiDataSource';
-import type { Assignments, Booking, Employee, Site, Unit } from './types';
+import type { Assignments, Booking, Employee, PlanId, Site, Unit, UnitType } from './types';
 
 /**
  * Data access contract for the Floorplan Manager. Every method is backed by a tiered
@@ -375,11 +375,23 @@ function buildFromCmmsGraph(sitesRes: unknown, buildingsRes: unknown, floorsRes:
   return sites.filter((s) => s.buildings.length > 0);
 }
 
+/** Facilio spaceCategory → this app's unit type + plan. Desks, lockers and parking stalls are
+ *  their own modules on the plan; anything else is a room. */
+function unitTypeFromSpaceCategory(category: string | null): { type: UnitType; plan: PlanId } {
+  const c = (category ?? '').toLowerCase();
+  if (/\b(desk|workstation|seat|hot ?desk)\b/.test(c)) return { type: 'workstation', plan: 'workstation' };
+  if (c.includes('locker')) return { type: 'locker', plan: 'locker' };
+  if (c.includes('parking')) return { type: 'parking', plan: 'parking' };
+  return { type: 'room', plan: 'custom' };
+}
+
 /**
- * Real spaces of ONE floor (server-filtered) → sidebar-listed room units. Space
- * records carry no plan geometry, so they get a point placeholder and are NOT
- * drawn on the canvas (room renderers are poly-guarded) — deliberately not
- * synthesized into fake positions.
+ * Real spaces of ONE floor (server-filtered) → sidebar-listed units, classified by their
+ * spaceCategory (Desk → desk, Locker → locker, Parking Stall → parking, else room) so a desk
+ * reads as a desk, not "room". Space records carry NO plan position (that lives in
+ * floorplanmarker / the facilio-iwms path), so each is flagged `unplaced`: listed in the sidebar
+ * with its real type but not drawn on the canvas — deliberately not synthesized into fake (0,0)
+ * positions that would stack every marker in the corner.
  */
 function mapCmmsSpacesToUnits(res: unknown, floorId: string): Unit[] {
   return cmmsRows(res)
@@ -390,15 +402,17 @@ function mapCmmsSpacesToUnits(res: unknown, floorId: string): Unit[] {
     .map((s) => {
       const category = lookupName(s.spaceCategory);
       const occupancy = typeof s.maxOccupancy === 'number' && s.maxOccupancy > 0 ? `seats ${s.maxOccupancy}` : null;
+      const { type, plan } = unitTypeFromSpaceCategory(category);
       return {
         id: String(s.id),
-        type: 'room' as const,
+        type,
         label: typeof s.name === 'string' && s.name ? s.name : `Space ${s.id}`,
         secondary: [category, occupancy].filter(Boolean).join(' · ') || undefined,
         room: null,
         geom: { kind: 'point' as const, x: 0, y: 0 },
+        unplaced: true,
         floor: floorId,
-        plan: 'custom' as const,
+        plan,
       };
     });
 }

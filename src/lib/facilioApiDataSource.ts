@@ -231,10 +231,38 @@ export async function fetchFloorplanImage(floorId: string, planId: PlanId): Prom
 
 export interface FloorplanFileUploadResult {
   fileId: number;
+  /** Object URL of the ORIGINAL uploaded bytes (a valid <img> src only for plain images). */
   previewUrl: string;
+  /**
+   * Object URL of Facilio's SERVER-RENDERED preview of the file (`v2/files/preview/{fileId}`
+   * without `fetchOriginal`) — a rasterized image for formats the browser can't draw itself
+   * (PDF, and DWG/DXF where the server rasterizes CAD). Null when the server returned non-image
+   * bytes (i.e. it couldn't render that file). This is what lets a browser-unrenderable DWG still
+   * be shown: upload → fileId → server image.
+   */
+  serverImageUrl: string | null;
   /** False when the fileId couldn't be attached to an `indoorfloorplan` record (e.g. `floorId` isn't a real floor id) — the upload+preview still succeeded. */
   attachedToFloorPlan: boolean;
   attachError?: string;
+}
+
+/**
+ * Fetch Facilio's server-rendered preview image for a stored file id. `v2/files/preview/{id}`
+ * WITHOUT `fetchOriginal` rasterizes supported documents (PDF pages, and CAD where the server
+ * renders it) to an image. Returns an object URL only when the response is actually an image;
+ * otherwise null (the file isn't server-renderable, so callers fall back). Best-effort.
+ */
+export async function fetchRenderedFileImage(fileId: number): Promise<string | null> {
+  if (!isFacilioApiConfigured) return null;
+  try {
+    const res = await getInstance().get(`v2/files/preview/${fileId}`, { responseType: 'blob' });
+    const blob = res.data as Blob;
+    const type = (res.headers?.['content-type'] || blob.type || '').toLowerCase();
+    if (type.startsWith('image/')) return URL.createObjectURL(blob);
+    return null;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -282,6 +310,9 @@ export async function uploadFloorplanFile(
     responseType: 'blob',
   });
   const previewUrl = URL.createObjectURL(previewRes.data);
+  // Also grab the server-RENDERED image (no fetchOriginal) — the display source for files the
+  // browser can't draw (PDF, DWG/DXF). Null when the server didn't rasterize it.
+  const serverImageUrl = await fetchRenderedFileImage(fileId);
 
   let attachedToFloorPlan = false;
   let attachError: string | undefined;
@@ -319,7 +350,7 @@ export async function uploadFloorplanFile(
     attachError = (err as Error).message || 'attach failed';
   }
 
-  return { fileId, previewUrl, attachedToFloorPlan, attachError };
+  return { fileId, previewUrl, serverImageUrl, attachedToFloorPlan, attachError };
 }
 
 /**

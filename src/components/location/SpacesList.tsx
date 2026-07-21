@@ -118,13 +118,8 @@ export function SpacesList() {
 function SpaceRow({ unit, unplaced }: { unit: Unit; unplaced?: boolean }) {
   const { state, actions } = useFloorplan();
   const status = unitStatus(state, unit, (id) => employeeName(state, id));
-  const dotColorMap: Record<Unit['type'], string> = {
-    workstation: 'var(--blue-500)',
-    room: 'rgba(60,34,157,0.62)',
-    locker: 'var(--brand-indigo-600)',
-    parking: 'var(--ink-600)',
-    amenity: 'var(--ink-500)',
-  };
+  // The row dot reflects the unit's current-state color from the module color settings
+  // (status.dot is moduleColor-driven), so a Settings color change shows here too.
   // Only the unplaced records drag onto the canvas (edit mode); placed markers are moved on the
   // canvas itself. The drag ghost is the type logo, not the row (see setTypeDragImage).
   const draggable = !!unplaced && unit.type !== 'room';
@@ -162,7 +157,7 @@ function SpaceRow({ unit, unplaced }: { unit: Unit; unplaced?: boolean }) {
       }
       title={draggable ? 'Drag onto the floorplan, or click and then click the map' : undefined}
     >
-      <span className={styles.dot} style={{ background: dotColorMap[unit.type] }} />
+      <span className={styles.dot} style={{ background: status.dot }} />
       <div className={styles.rowText}>
         <div className={styles.rowLabel}>{unit.label}</div>
         <div className={styles.rowSub}>{unit.secondary || [unit.type === 'workstation' ? 'Desk' : unit.type, unit.room].filter(Boolean).join(' · ')}</div>
